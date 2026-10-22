@@ -7,7 +7,9 @@ A minimal executive and construction assistant for Phil's family software projec
 - **The desk** is plain Markdown with JSON front matter. It lives at `/mnt/data/quick-support-team/desk` by default, or wherever `QST_DESK` points.
 - **One construction workflow:** approved work order → isolated worktree → implementer → coordinator runs the real tests → local commit → separate reviewer session → at most one correction → outcome.
 
-Operating guide: [docs/operating.md](docs/operating.md).
+- [docs/status.md](docs/status.md): current state, verification evidence, blockers, pending approvals, live smoke test. **Start here in a new session.**
+- [docs/operating.md](docs/operating.md): how to supply context, the workflow, questions, capacity, pause and recovery, scheduling.
+- [docs/decisions.md](docs/decisions.md): decisions made with Phil, build-time defaults, discovery findings, scope.
 
 ## Install
 

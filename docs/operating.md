@@ -120,16 +120,4 @@ Nothing is launched until `owner/capacity.md` enables autonomous use and sets al
 
 ## What was verified
 
-| Check | Status |
-|---|---|
-| 21 fixture tests (`node --test test/*.test.ts`) and `scripts/walkthrough.sh` | verified: workflow mechanics with deterministic fixture agents, real git worktrees and real test commands |
-| Herdr | verified only by reading `herdr --skill` and `--help` (v0.9.3); `qst open` was not run against your session |
-| `claude -p` and `codex exec` | flags read from `--help`; **no live agent was run** |
-
-Not yet verified:
-- authentication when run from cron
-- Claude `--permission-mode auto` behaviour without a terminal
-- Codex sandbox behaviour inside the worktree
-- the real JSON result quality
-
-A one-launch live smoke test is described in the handoff.
+See [status.md](status.md): verification evidence, what is still unverified live, blockers, pending approvals, and the live smoke test.
