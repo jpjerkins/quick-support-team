@@ -69,6 +69,18 @@ test('malformed agent result does not mark work complete', () => {
   assert.equal(calls(e, 'review').length, 0);
 });
 
+test('parseable implementer result with nonzero exit is rejected', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [{ json: { status: 'done', summary: 'looks done' }, exit: 7 }], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const m = wo(e, id);
+  assert.equal(m.status, 'blocked');
+  assert.equal(m.attempts[0].result_ok, false);
+  assert.match(m.outcome_summary, /agent exited 7/);
+  assert.equal(calls(e, 'review').length, 0);
+});
+
 test('review findings get one correction, then a second rejection blocks with unresolved findings', () => {
   const e = setup();
   const id = approvedWorkOrder(e);

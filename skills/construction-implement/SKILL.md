@@ -5,7 +5,7 @@ description: Implement one bounded qst work order in an isolated worktree, test-
 
 # Implement a work order
 
-You work inside an isolated git worktree. The coordinator validates, commits and reviews; your job is a correct, reviewable change.
+For code work, you work inside an isolated git worktree. The coordinator validates, commits and reviews; your job is a correct, reviewable change.
 
 1. **Read** the assignment (outcome and acceptance criteria), the owner guidance files named in the prompt, the repository's own instructions (`CLAUDE.md`, `AGENTS.md`, README) and any answered questions or correction feedback in the prompt.
 2. **Design in place.** Make routine choices inside the guidance yourself and note them in your summary. When the work needs a consequential product or architecture decision that guidance does not settle, stop and ask (step 5) instead of guessing; leave any useful work in the worktree.
@@ -17,3 +17,7 @@ You work inside an isolated git worktree. The coordinator validates, commits and
    - `blocked`: something outside the assignment prevents progress (missing access, broken environment); say what.
 
 Leave commits, pushes, merges and deploys to the coordinator and Phil.
+
+## Research work orders
+
+For `research` work, follow the assignment's scratch-directory prompt as a read-only boundary. Do not create, edit, or delete files, change state by running commands, or contact anyone. Cite a source for every acceptance criterion. Return `evidence[]` entries with the criterion, citation, and finding. Do not apply the code-worktree, test-first, implementation, or validation steps above to research work.
