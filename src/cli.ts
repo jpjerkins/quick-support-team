@@ -20,7 +20,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst ingest guidance --topic priorities|constraints|technical|architecture --text T --source SRC
   qst ingest decision --text T --source SRC [--approve WO-ID...] [--answers Q-ID] [--resolves D-ID]
   qst ingest observation|proposal --text T --source SRC --by WHO [--departure TITLE --project S]
-  qst workorder add --project S --outcome O --accept A... [--validate CMD...] [--departure DEP-ID...] --source SRC
+  qst workorder add --project S --outcome O --accept A... [--kind code|research] [--validate CMD...] [--departure DEP-ID...] --source SRC
   qst sweep [--dry-run] [--owner]            one bounded sweep (--owner: you are explicitly authorizing this run)
   qst status [WO-ID]                         digest, or one work order in detail
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
@@ -64,7 +64,7 @@ async function main(): Promise<number> {
     case 'workorder': {
       if (sub !== 'add') throw new Error('usage: qst workorder add ...');
       if (!o.project || !o.outcome || !o.source) throw new Error('--project, --outcome and --source are required');
-      console.log(createWorkOrder({ project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source }));
+      console.log(createWorkOrder({ kind: o.kind, project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source }));
       return 0;
     }
     case 'sweep':

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-export const QST = path.join(ROOT, 'bin', 'qst');
+export const QST = path.join(ROOT, 'src', 'cli.ts');
 
 export type Env = { root: string; desk: string; repo: string; env: NodeJS.ProcessEnv };
 
@@ -53,12 +53,12 @@ export function script(e: Env, s: object): void {
 }
 
 export function qst(e: Env, ...args: string[]): { code: number; out: string } {
-  const r = spawnSync(QST, args, { env: e.env, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [QST, ...args], { env: e.env, encoding: 'utf8' });
   return { code: r.status ?? -1, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }
 
 export function qstAsync(e: Env, ...args: string[]) {
-  return spawn(QST, args, { env: e.env, stdio: 'ignore' });
+  return spawn(process.execPath, [QST, ...args], { env: e.env, stdio: 'ignore' });
 }
 
 export function calls(e: Env, role?: string): any[] {

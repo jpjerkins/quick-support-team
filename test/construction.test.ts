@@ -10,6 +10,7 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
   assert.equal(qst(e, 'sweep').code, 0);
   const m = wo(e, id);
+  assert.equal(m.kind, 'code');
   assert.equal(m.status, 'ready-for-integration');
   assert.equal(m.validations.at(-1).passed, true);
   assert.match(spawnSync('git', ['-C', m.worktree, 'log', '--oneline', '-1'], { encoding: 'utf8' }).stdout, new RegExp(id));
@@ -18,6 +19,30 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   assert.notEqual(calls(e, 'implement')[0].pid, calls(e, 'review')[0].pid);
   assert.ok(m.attempts[0].snapshots['skills/construction-implement']);
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
+});
+
+test('research work order needs no repo or validation and completes from cited evidence', () => {
+  const e = setup();
+  qst(e, 'ingest', 'project', '--slug', 'topic', '--text', 'Research topic', '--source', 'test');
+  assert.notEqual(qst(e, 'workorder', 'add', '--kind', 'ops', '--project', 'topic', '--outcome', 'Bad kind', '--accept', 'x', '--source', 'test').code, 0);
+  const id = qst(e, 'workorder', 'add', '--kind', 'research', '--project', 'topic', '--outcome', 'Research the topic', '--accept', 'Find primary evidence', '--source', 'test').out.trim();
+  qst(e, 'ingest', 'decision', '--approve', id, '--text', 'approved', '--source', 'test');
+  const evidence = [{ criterion: 'Find primary evidence', citation: 'https://example.test/source', excerpt: 'Direct source states the finding.' }];
+  script(e, {
+    implement: [{ json: { status: 'done', summary: 'Found primary source', evidence } }],
+    review: [{ json: { verdict: 'approve', summary: 'Evidence supports the criterion', findings: [], assessments: [{ criterion: 'Find primary evidence', evidence: 'https://example.test/source', result: 'met' }] } }],
+    executive: [EXEC_EMPTY],
+  });
+  assert.equal(qst(e, 'sweep').code, 0);
+  const m = wo(e, id);
+  assert.equal(m.kind, 'research');
+  assert.equal(m.status, 'complete');
+  assert.equal(m.repo, undefined);
+  assert.equal(m.worktree, undefined);
+  assert.deepEqual(m.validations, []);
+  assert.match(calls(e, 'implement')[0].prompt, /read-only/);
+  assert.match(calls(e, 'review')[0].prompt, /citation/);
+  assert.equal(calls(e, 'implement')[0].cwd, `${e.desk}/work/${id}/scratch`);
 });
 
 test('failed checks never produce ready-for-integration; one correction, then failed, no review', () => {

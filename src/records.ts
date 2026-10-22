@@ -12,20 +12,22 @@ export function listWOs(): Rec[] {
   return fs.existsSync(dir) ? fs.readdirSync(dir).sort().map((id) => readRec(woFile(id))).filter((r): r is Rec => !!r) : [];
 }
 
-export function createWorkOrder(w: { project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number }): string {
+export function createWorkOrder(w: { kind?: string; project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number }): string {
+  const kind = w.kind ?? 'code';
+  if (!['code', 'research'].includes(kind)) throw new Error('--kind must be code|research');
   const proj = readRec(p('portfolio', `${w.project}.md`));
   if (!proj) throw new Error(`unknown project "${w.project}"; record it first with: qst ingest project --slug ${w.project} ...`);
-  if (!proj.meta.repo) throw new Error(`project "${w.project}" has no repo`);
-  const validate = w.validate?.length ? w.validate : proj.meta.validate;
-  if (!validate?.length) throw new Error(`no validation commands for "${w.project}"; pass --validate or set them on the project`);
+  if (kind === 'code' && !proj.meta.repo) throw new Error(`project "${w.project}" has no repo`);
+  const validate = kind === 'code' ? (w.validate?.length ? w.validate : proj.meta.validate) : [];
+  if (kind === 'code' && !validate?.length) throw new Error(`no validation commands for "${w.project}"; pass --validate or set them on the project`);
   if (!w.acceptance.length) throw new Error('at least one --accept criterion is required');
   const id = newId('WO');
   const meta = {
-    id, project: w.project, repo: proj.meta.repo, outcome: w.outcome, acceptance: w.acceptance, validate,
+    id, kind, project: w.project, ...(proj.meta.repo ? { repo: proj.meta.repo } : {}), outcome: w.outcome, acceptance: w.acceptance, validate,
     departures: w.departures ?? [], rank: w.rank ?? 100, source: w.source, created: iso(), status: 'proposed',
     corrections_used: 0, max_corrections: 1, attempts: [], questions: [], validations: [], reviews: [],
   };
-  const body = `# ${id}: ${w.outcome}\n\nProject: ${w.project} (${proj.meta.repo})\n\n## Acceptance criteria\n${w.acceptance.map((a) => `- ${a}`).join('\n')}\n\n## Validation\n${validate.map((v: string) => `- \`${v}\``).join('\n')}\n`;
+  const body = `# ${id}: ${w.outcome}\n\nProject: ${w.project}${proj.meta.repo ? ` (${proj.meta.repo})` : ''}\n\n## Acceptance criteria\n${w.acceptance.map((a) => `- ${a}`).join('\n')}${kind === 'code' ? `\n\n## Validation\n${validate.map((v: string) => `- \`${v}\``).join('\n')}` : ''}\n`;
   writeRec(woFile(id), meta, body);
   return id;
 }
