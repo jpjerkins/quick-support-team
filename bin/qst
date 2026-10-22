@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Resolves symlinks so an installed link runs the installed copy's sources.
+here="$(dirname "$(readlink -f "$0")")"
+exec node --disable-warning=ExperimentalWarning "$here/../src/cli.ts" "$@"
