@@ -84,6 +84,33 @@ test('unchanged pending decisions do not create repeated interruptions', () => {
   assert.match(qst(e, 'digest').out, /1 open, 0 new/);
 });
 
+test('persisted executive actions replay safely after an interrupted apply', () => {
+  const e = setup();
+  qst(e, 'ingest', 'project', '--slug', 'tiny', '--name', 'Tiny', '--state', 'building', '--repo', e.repo, '--validate', 'node test.js', '--text', 'SAMPLE project', '--source', 'test');
+  const decision = { key: 'pick-backup', title: 'Pick a backup target', why: 'no guidance', recommendation: 'use /mnt/backup', tradeoff: 'local only', blocks: [], deadline: null, priority: 2 };
+  script(e, { executive: [{ json: { answers: [], decisions: [decision], workorders: [{ project: 'tiny', outcome: 'Add small feature', acceptance: ['feature works'], why: 'finish it' }], notes: 'n' } }] });
+  qst(e, 'ingest', 'observation', '--text', 'SAMPLE obs', '--source', 'test', '--by', 'owner');
+  qst(e, 'sweep');
+  const runFile = `${e.desk}/runs/${files(e, 'runs').find((f) => f.endsWith('.md'))}`;
+  const runText = fs.readFileSync(runFile, 'utf8');
+  const runMeta = JSON.parse(runText.slice(4, runText.indexOf('\n---\n', 4)));
+  assert.equal(runMeta.status, 'applied');
+  assert.ok(runMeta.result, 'validated result is stored on the run');
+  const beforeWOs = fs.readdirSync(`${e.desk}/work`).length;
+  const beforeDecisions = files(e, 'decisions').length;
+  const decisionFile = files(e, 'decisions').find((f) => fs.readFileSync(`${e.desk}/decisions/${f}`, 'utf8').includes('pick-backup'))!;
+  const decisionText = fs.readFileSync(`${e.desk}/decisions/${decisionFile}`, 'utf8');
+  const timesRaised = JSON.parse(decisionText.slice(4, decisionText.indexOf('\n---\n', 4))).times_raised;
+  fs.writeFileSync(runFile, runText.replace('"status": "applied"', '"status": "applying"'));
+  qst(e, 'sweep');
+  assert.equal(fs.readdirSync(`${e.desk}/work`).length, beforeWOs);
+  assert.equal(files(e, 'decisions').length, beforeDecisions);
+  const replayedDecisionFile = files(e, 'decisions').find((f) => fs.readFileSync(`${e.desk}/decisions/${f}`, 'utf8').includes('pick-backup'))!;
+  const replayedDecisionText = fs.readFileSync(`${e.desk}/decisions/${replayedDecisionFile}`, 'utf8');
+  assert.equal(JSON.parse(replayedDecisionText.slice(4, replayedDecisionText.indexOf('\n---\n', 4))).times_raised, timesRaised);
+  assert.match(fs.readFileSync(runFile, 'utf8'), /"status": "applied"/);
+});
+
 test('dry run reports proposed dispatch and starts nothing', () => {
   const e = setup();
   approvedWorkOrder(e);

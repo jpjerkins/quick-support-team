@@ -26,7 +26,11 @@ export function listWOs(): Rec[] {
   return fs.existsSync(dir) ? fs.readdirSync(dir).sort().map((id) => readRec(woFile(id))).filter((r): r is Rec => !!r) : [];
 }
 
-export function createWorkOrder(w: { kind?: string; project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number }): string {
+export function createWorkOrder(w: { kind?: string; project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number; actionId?: string }): string {
+  if (w.actionId) {
+    const existing = listWOs().find((r) => r.meta.action_id === w.actionId);
+    if (existing) return existing.meta.id;
+  }
   const kind = w.kind ?? 'code';
   if (!['code', 'research'].includes(kind)) throw new Error('--kind must be code|research');
   const proj = readRec(p('portfolio', `${w.project}.md`));
@@ -38,7 +42,7 @@ export function createWorkOrder(w: { kind?: string; project: string; outcome: st
   const id = newId('WO');
   const meta = {
     id, slug: newSlug(), kind, project: w.project, ...(proj.meta.repo ? { repo: proj.meta.repo } : {}), outcome: w.outcome, acceptance: w.acceptance, validate,
-    departures: w.departures ?? [], rank: w.rank ?? 100, source: w.source, created: iso(), status: 'proposed',
+    departures: w.departures ?? [], rank: w.rank ?? 100, source: w.source, ...(w.actionId ? { action_id: w.actionId } : {}), created: iso(), status: 'proposed',
     corrections_used: 0, max_corrections: 1, attempts: [], questions: [], validations: [], reviews: [],
   };
   const body = `# ${id} (${meta.slug}): ${w.outcome}\n\nProject: ${w.project}${proj.meta.repo ? ` (${proj.meta.repo})` : ''}\n\n## Acceptance criteria\n${w.acceptance.map((a) => `- ${a}`).join('\n')}${kind === 'code' ? `\n\n## Validation\n${validate.map((v: string) => `- \`${v}\``).join('\n')}` : ''}\n`;
@@ -56,9 +60,9 @@ export function createQuestion(wo: string, q: { text: string; evidence?: string;
   return id;
 }
 
-export function answerQuestion(id: string, a: { answer: string; kind: string; by: string; refs?: string[] }): void {
+export function answerQuestion(id: string, a: { answer: string; kind: string; by: string; refs?: string[]; actionId?: string }): void {
   const r = readRec(qFile(id))!;
-  writeRec(r.file, { ...r.meta, status: 'answered', answer_kind: a.kind, answered_by: a.by, answered: iso(), guidance_refs: a.refs ?? [] },
+  writeRec(r.file, { ...r.meta, ...(a.actionId ? { action_id: a.actionId } : {}), status: 'answered', answer_kind: a.kind, answered_by: a.by, answered: iso(), guidance_refs: a.refs ?? [] },
     r.body + `\n## Answer (${a.kind}, ${a.by})\n${a.answer}\n`);
 }
 
@@ -69,15 +73,19 @@ export const answerText = (r: Rec) => r.body.split(/## Answer[^\n]*\n/).pop()!.t
 export const dFile = (id: string) => p('decisions', `${id}.md`);
 export const listDecisions = () => listRecs(p('decisions'));
 
-export function raiseDecision(d: { key?: string; title: string; why: string; recommendation: string; tradeoff: string; blocks?: string[]; deadline?: string | null; priority: number; source: string }): string {
+export function raiseDecision(d: { key?: string; title: string; why: string; recommendation: string; tradeoff: string; blocks?: string[]; deadline?: string | null; priority: number; source: string; actionId?: string }): string {
+  if (d.actionId) {
+    const applied = listDecisions().find((r) => r.meta.action_id === d.actionId);
+    if (applied) return applied.meta.id;
+  }
   const key = d.key ?? d.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const existing = listDecisions().find((r) => r.meta.status === 'open' && r.meta.key === key);
   if (existing) {
-    writeRec(existing.file, { ...existing.meta, last_seen: iso(), times_raised: (existing.meta.times_raised ?? 1) + 1 }, existing.body);
+    writeRec(existing.file, { ...existing.meta, ...(d.actionId ? { action_id: d.actionId } : {}), last_seen: iso(), times_raised: (existing.meta.times_raised ?? 1) + 1 }, existing.body);
     return existing.meta.id;
   }
   const id = newId('D');
-  const meta = { id, key, status: 'open', priority: d.priority, deadline: d.deadline ?? null, blocks: d.blocks ?? [], source: d.source, raised: iso(), times_raised: 1 };
+  const meta = { id, key, status: 'open', priority: d.priority, deadline: d.deadline ?? null, blocks: d.blocks ?? [], source: d.source, ...(d.actionId ? { action_id: d.actionId } : {}), raised: iso(), times_raised: 1 };
   const body = `# ${d.title}\n\n**Why it needs you:** ${d.why}\n\n**Recommendation:** ${d.recommendation}\n\n**Tradeoff:** ${d.tradeoff}\n\n**Blocks:** ${(d.blocks ?? []).join(', ') || 'nothing'}\n\n**Deadline:** ${d.deadline ?? 'none'}\n`;
   writeRec(dFile(id), meta, body);
   return id;

@@ -88,32 +88,41 @@ export async function runExecutive(ctx: Ctx, reasons: string[]): Promise<void> {
   const result = parseResult(text);
   const errors = checkExecutive(result);
   if (res.exitCode !== 0 || res.timedOut) errors.push(`agent exit ${res.exitCode}${res.timedOut ? ' (timed out)' : ''}`);
-  Object.assign(run, { status: errors.length ? 'rejected' : 'applied', ended: iso(), exit: res.exitCode, usage, errors });
+  Object.assign(run, { status: errors.length ? 'rejected' : 'applying', ended: iso(), exit: res.exitCode, usage, errors, ...(errors.length ? {} : { result }) });
   writeRec(file, run);
-  // Consumed either way; do not re-spend on the same inputs every sweep.
+  if (errors.length) { log(`executive result rejected: ${errors.join('; ')}`); finishExecutive(run); return; }
+  applyExecutive(result, id);
+  finishExecutive(run);
+  Object.assign(run, { status: 'applied' });
+  writeRec(file, run);
+}
+
+function finishExecutive(run: Record<string, any>): void {
   const state = readState();
   delete state.exec_hold;
-  writeState({ ...state, last_exec_at: started, last_exec_run: id });
-  if (errors.length) { log(`executive result rejected: ${errors.join('; ')}`); return; }
-  applyExecutive(result, id);
+  writeState({ ...state, last_exec_at: run.started, last_exec_run: run.id });
 }
 
 const createdValidate = (id: string) => loadWO(id).meta.validate.map((v: string) => `\`${v}\``).join(', ');
 
 function applyExecutive(result: any, runId: string): void {
   const source = `chief-of-staff ${runId}`;
-  for (const a of result.answers) {
+  for (const [i, a] of result.answers.entries()) {
+    const actionId = `${runId}:answer:${i}`;
     const q = readRec(qFile(a.question));
+    if (q?.meta.action_id === actionId) continue;
     if (!q || q.meta.status !== 'open' || q.meta.desk !== 'chief-of-staff') { log(`${runId}: ignored answer for ${a.question} (not an open chief-of-staff question)`); continue; }
-    if (a.route_to === 'architecture') { writeRec(q.file, { ...q.meta, desk: 'architecture', rerouted_by: source }, q.body); log(`${q.meta.id} routed to architecture`); continue; }
-    answerQuestion(q.meta.id, { answer: a.answer, kind: 'routine', by: source, refs: a.guidance_refs ?? [] });
+    if (a.route_to === 'architecture') { writeRec(q.file, { ...q.meta, action_id: actionId, desk: 'architecture', rerouted_by: source }, q.body); log(`${q.meta.id} routed to architecture`); continue; }
+    answerQuestion(q.meta.id, { answer: a.answer, kind: 'routine', by: source, refs: a.guidance_refs ?? [], actionId });
   }
-  for (const d of result.decisions) raiseDecision({ ...d, source });
-  for (const w of result.workorders) {
+  for (const [i, d] of result.decisions.entries()) raiseDecision({ ...d, source, actionId: `${runId}:decision:${i}` });
+  for (const [i, w] of result.workorders.entries()) {
     try {
-      const id = createWorkOrder({ ...w, source });
+      const actionId = `${runId}:workorder:${i}`;
+      const id = createWorkOrder({ ...w, source, actionId });
       raiseDecision({
         key: `approve-${id}`, title: `Approve work order ${id}: ${w.outcome}`, priority: 2, blocks: [id], source,
+        actionId: `${actionId}:approval`,
         why: `Starting construction spends subscription capacity, which only you can authorize. Approving also lets these validation commands run on the host: ${createdValidate(id)}.`,
         recommendation: w.why ?? 'Approve', tradeoff: 'Uses roughly 2-4 metered launches (implement, review, maybe one correction).',
       });
@@ -123,7 +132,16 @@ function applyExecutive(result: any, runId: string): void {
 }
 
 export function recoverExecutiveRuns(): void {
-  for (const r of listRecs(p('runs')).filter((x) => ['dispatched', 'running'].includes(x.meta.status))) {
+  for (const r of listRecs(p('runs')).filter((x) => x.meta.status === 'applying' || ['dispatched', 'running'].includes(x.meta.status))) {
+    if (r.meta.status === 'applying' && r.meta.result) {
+      applyExecutive(r.meta.result, r.meta.id);
+      const state = readState();
+      delete state.exec_hold;
+      writeState({ ...state, last_exec_at: r.meta.started, last_exec_run: r.meta.id });
+      writeRec(r.file, { ...r.meta, status: 'applied' }, r.body);
+      log(`resumed executive run ${r.meta.id}`);
+      continue;
+    }
     if (r.meta.pid && pidAlive(r.meta.pid)) continue;
     writeRec(r.file, { ...r.meta, status: 'uncertain', noted: iso() }, r.body);
     log(`executive run ${r.meta.id} was interrupted; marked uncertain (its proposals were not applied)`);
