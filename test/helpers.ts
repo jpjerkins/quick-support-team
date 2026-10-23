@@ -53,12 +53,12 @@ export function script(e: Env, s: object): void {
 }
 
 export function qst(e: Env, ...args: string[]): { code: number; out: string } {
-  const r = spawnSync(QST, args, { env: e.env, encoding: 'utf8' });
+  const r = spawnSync('bash', [QST, ...args], { env: e.env, encoding: 'utf8' });
   return { code: r.status ?? -1, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }
 
 export function qstAsync(e: Env, ...args: string[]) {
-  return spawn(QST, args, { env: e.env, stdio: 'ignore' });
+  return spawn('bash', [QST, ...args], { env: e.env, stdio: 'ignore' });
 }
 
 export function calls(e: Env, role?: string): any[] {

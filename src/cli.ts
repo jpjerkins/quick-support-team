@@ -71,7 +71,7 @@ async function main(): Promise<number> {
       if (o['dry-run']) { for (const line of dryRun({ owner: !!o.owner })) console.log(`[dry-run] ${line}`); return 0; }
       return sweep({ owner: !!o.owner });
     case 'status':
-      if (sub) { const wo = loadWO(sub); console.log(wo.body); const out = p('work', sub, 'outcome.md'); if (fs.existsSync(out)) console.log(fs.readFileSync(out, 'utf8')); console.log(`status: ${wo.meta.status}\nrecord: ${wo.file}`); return 0; }
+      if (sub) { const wo = loadWO(sub); console.log(wo.body); const out = p('work', wo.meta.id, 'outcome.md'); if (fs.existsSync(out)) console.log(fs.readFileSync(out, 'utf8')); console.log(`slug: ${wo.meta.slug ?? '(none)'}\nstatus: ${wo.meta.status}\nrecord: ${wo.file}`); return 0; }
       console.log(renderDigest());
       return 0;
     case 'digest':

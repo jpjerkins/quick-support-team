@@ -19,7 +19,7 @@ export function applyOwnerSignals(): void {
         if (wo.meta.status !== 'proposed') { log(`${s.meta.id}: ${id} is ${wo.meta.status}, not proposed; approval ignored`); continue; }
         Object.assign(wo.meta, { status: 'approved', approved_by: s.meta.id });
         saveRec(wo);
-        const d = listDecisions().find((r) => r.meta.status === 'open' && r.meta.key === `approve-${id}`);
+        const d = listDecisions().find((r) => r.meta.status === 'open' && r.meta.key === `approve-${wo.meta.id}`);
         if (d) resolveDecision(d.meta.id, text, s.meta.id);
         log(`${id} approved by owner (${s.meta.id})`);
       } catch (e: any) { log(`${s.meta.id}: ${e.message}`); }

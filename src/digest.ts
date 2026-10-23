@@ -28,13 +28,13 @@ export function renderDigest(): string {
   });
 
   const done = wos.filter((w) => w.meta.outcome_at).sort((a, b) => b.meta.outcome_at.localeCompare(a.meta.outcome_at));
-  out.push('', '## Outcomes', '', ...(done.length ? done.slice(0, 10).map((w) => `- ${w.meta.id} **${w.meta.status}**: ${w.meta.outcome_summary}\n  Next: ${w.meta.next_action}`) : ['- none yet']));
+  out.push('', '## Outcomes', '', ...(done.length ? done.slice(0, 10).map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''} **${w.meta.status}**: ${w.meta.outcome_summary}\n  Next: ${w.meta.next_action}`) : ['- none yet']));
 
   const active = wos.filter((w) => ACTIVE.includes(w.meta.status) || w.meta.status === 'approved');
-  out.push('', '## Active work', '', ...(active.length ? active.map((w) => `- ${w.meta.id} ${w.meta.status}: ${w.meta.outcome}${w.meta.next_action ? ` (next: ${w.meta.next_action})` : ''}${w.meta.capacity_hold ? ` [${w.meta.capacity_hold}]` : ''}`) : ['- none']));
+  out.push('', '## Active work', '', ...(active.length ? active.map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''} ${w.meta.status}: ${w.meta.outcome}${w.meta.next_action ? ` (next: ${w.meta.next_action})` : ''}${w.meta.capacity_hold ? ` [${w.meta.capacity_hold}]` : ''}`) : ['- none']));
 
   const proposed = wos.filter((w) => w.meta.status === 'proposed');
-  if (proposed.length) out.push('', '## Proposed (awaiting approval)', '', ...proposed.map((w) => `- ${w.meta.id}: ${w.meta.outcome} (${w.meta.project})`));
+  if (proposed.length) out.push('', '## Proposed (awaiting approval)', '', ...proposed.map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''}: ${w.meta.outcome} (${w.meta.project})`));
 
   const qs = listQuestions().filter((q) => q.meta.status !== 'answered');
   if (qs.length) out.push('', '## Questions in flight', '', ...qs.map((q) => `- ${q.meta.id} (${q.meta.wo}) ${q.meta.status} at ${q.meta.desk}: ${questionText(q).slice(0, 160)}`));

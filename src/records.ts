@@ -5,7 +5,21 @@ import { p, newId, iso, readRec, writeRec, listRecs } from './desk.ts';
 import type { Rec } from './desk.ts';
 
 export const woFile = (id: string) => p('work', id, 'workorder.md');
-export const loadWO = (id: string) => { const r = readRec(woFile(id)); if (!r) throw new Error(`no work order ${id}`); return r; };
+const slugWords = 'amber apple bird blue breeze calm candle cedar cloud coral crisp dawn deer dream eagle ember fern field fire flame flower fog forest fox frost garden gold green harbor hazel hill honey lake leaf light maple meadow moon moss mountain north oak ocean olive orchid paper peach pine river robin rose silver sky snow soft stone sunny swift tide tree violet water wheat willow wind winter'.split(' ');
+function newSlug(): string {
+  const used = new Set(listWOs().map((w) => w.meta.slug));
+  let slug: string;
+  do { slug = `${slugWords[crypto.randomInt(slugWords.length)]}-${slugWords[crypto.randomInt(slugWords.length)]}`; }
+  while (used.has(slug));
+  return slug;
+}
+export const loadWO = (id: string) => {
+  const direct = readRec(woFile(id));
+  if (direct) return direct;
+  const matches = listWOs().filter((w) => w.meta.slug === id);
+  if (matches.length === 1) return matches[0];
+  throw new Error(matches.length ? `ambiguous work order slug ${id}` : `no work order ${id}`);
+};
 export const saveRec = (r: Rec) => writeRec(r.file, r.meta, r.body);
 export function listWOs(): Rec[] {
   const dir = p('work');
@@ -21,11 +35,11 @@ export function createWorkOrder(w: { project: string; outcome: string; acceptanc
   if (!w.acceptance.length) throw new Error('at least one --accept criterion is required');
   const id = newId('WO');
   const meta = {
-    id, project: w.project, repo: proj.meta.repo, outcome: w.outcome, acceptance: w.acceptance, validate,
+    id, slug: newSlug(), project: w.project, repo: proj.meta.repo, outcome: w.outcome, acceptance: w.acceptance, validate,
     departures: w.departures ?? [], rank: w.rank ?? 100, source: w.source, created: iso(), status: 'proposed',
     corrections_used: 0, max_corrections: 1, attempts: [], questions: [], validations: [], reviews: [],
   };
-  const body = `# ${id}: ${w.outcome}\n\nProject: ${w.project} (${proj.meta.repo})\n\n## Acceptance criteria\n${w.acceptance.map((a) => `- ${a}`).join('\n')}\n\n## Validation\n${validate.map((v: string) => `- \`${v}\``).join('\n')}\n`;
+  const body = `# ${id} (${meta.slug}): ${w.outcome}\n\nProject: ${w.project} (${proj.meta.repo})\n\n## Acceptance criteria\n${w.acceptance.map((a) => `- ${a}`).join('\n')}\n\n## Validation\n${validate.map((v: string) => `- \`${v}\``).join('\n')}\n`;
   writeRec(woFile(id), meta, body);
   return id;
 }

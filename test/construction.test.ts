@@ -20,6 +20,21 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
 });
 
+test('work order slugs are shown and accepted anywhere a work order id is used', () => {
+  const e = setup();
+  qst(e, 'ingest', 'project', '--slug', 'tiny', '--name', 'Tiny', '--state', 'building', '--repo', e.repo, '--validate', 'node test.js', '--text', 'SAMPLE project', '--source', 'test');
+  const id = qst(e, 'workorder', 'add', '--project', 'tiny', '--outcome', 'Add mul()', '--accept', 'mul(2,3) returns 6', '--source', 'test').out.trim();
+  const slug = wo(e, id).slug;
+  assert.match(slug, /^[a-z]+-[a-z]+$/);
+  assert.match(qst(e, 'status', slug).out, new RegExp(`slug: ${slug}`));
+  assert.match(qst(e, 'digest').out, new RegExp(`${id} \\(${slug}\\)`));
+  qst(e, 'ingest', 'decision', '--approve', slug, '--text', 'approved', '--source', 'test');
+  script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  assert.equal(wo(e, id).status, 'ready-for-integration');
+  assert.equal(qst(e, 'reconcile', slug, '--retry').code, 1, 'slug lookup still enforces the command state');
+});
+
 test('failed checks never produce ready-for-integration; one correction, then failed, no review', () => {
   const e = setup();
   const id = approvedWorkOrder(e);
