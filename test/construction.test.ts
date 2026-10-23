@@ -21,6 +21,28 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
 });
 
+test('finished run preserves an immutable bundle of assignment, guidance, and used skills', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const root = `${e.desk}/work/${id}/assignment-bundles`;
+  const manifest = fs.readdirSync(root).find((f) => f.endsWith('.json'))!;
+  const bundle = JSON.parse(fs.readFileSync(`${root}/${manifest}`, 'utf8'));
+  assert.deepEqual(bundle.validate, ['node test.js']);
+  assert.deepEqual(bundle.acceptance, ['mul(2,3) returns 6']);
+  const inputs = `${root}/inputs`;
+  const implement = `${inputs}/${bundle.attempts[0]}`;
+  const review = `${inputs}/${bundle.attempts[1]}`;
+  assert.match(fs.readFileSync(`${implement}/workorder.md`, 'utf8'), /Add mul\(\)/);
+  assert.match(fs.readFileSync(`${implement}/owner/technical.md`, 'utf8'), /Owner technical/);
+  assert.match(fs.readFileSync(`${implement}/skills/construction-implement.md`, 'utf8'), /Implement a work order/);
+  assert.match(fs.readFileSync(`${review}/skills/construction-review.md`, 'utf8'), /Review a work order/);
+  const saved = fs.readFileSync(`${implement}/owner/technical.md`, 'utf8');
+  fs.appendFileSync(`${e.desk}/owner/technical.md`, '\nchanged later\n');
+  assert.equal(fs.readFileSync(`${implement}/owner/technical.md`, 'utf8'), saved);
+});
+
 test('work order slugs are shown and accepted anywhere a work order id is used', () => {
   const e = setup();
   qst(e, 'ingest', 'project', '--slug', 'tiny', '--name', 'Tiny', '--state', 'building', '--repo', e.repo, '--validate', 'node test.js', '--text', 'SAMPLE project', '--source', 'test');

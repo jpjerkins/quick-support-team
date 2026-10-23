@@ -45,6 +45,18 @@ function snapshots(skill: string): Record<string, string | null> {
   return s;
 }
 
+function preserveAssignment(wo: Rec, attemptId: string, skill: string): void {
+  const dir = p('work', wo.meta.id, 'assignment-bundles', 'inputs', attemptId);
+  const files = [
+    [woFile(wo.meta.id), path.join(dir, 'workorder.md')],
+    ...guidanceFiles().map((file) => [file, path.join(dir, 'owner', path.basename(file))]),
+    [skillPath(skill), path.join(dir, 'skills', `${skill}.md`)],
+  ];
+  for (const [source, target] of files as [string, string][]) {
+    if (fs.existsSync(source) && !fs.existsSync(target)) writeAtomic(target, fs.readFileSync(source, 'utf8'));
+  }
+}
+
 // Records dispatch intent before the agent starts, then the returned identity and exit.
 async function launch(wo: Rec, role: string, skill: string, prompt: string, access: Access, ctx: Ctx): Promise<boolean> {
   const r = route(role);
@@ -62,6 +74,7 @@ async function launch(wo: Rec, role: string, skill: string, prompt: string, acce
     id, role, status: 'dispatched', started: iso(), provider: r.provider, model: r.model, harness: r.harness,
     out_dir: p('work', wo.meta.id, 'attempts', id), snapshots: snapshots(skill),
   };
+  preserveAssignment(wo, id, skill);
   wo.meta.attempts.push(attempt);
   saveRec(wo);
   recordLaunch({ provider: r.provider, model: r.model, role, ref: `${wo.meta.id}/${id}` });
@@ -329,6 +342,15 @@ export function writeOutcome(wo: Rec): void {
   const m = wo.meta;
   const v = m.validations?.at(-1);
   const r = m.reviews?.at(-1);
+  if (m.outcome_at) {
+    const attempts = m.attempts.map((a: any) => a.id);
+    const bundle = p('work', m.id, 'assignment-bundles', `assignment-bundle-${attempts.at(-1) ?? m.outcome_at}.json`);
+    if (!fs.existsSync(bundle)) writeAtomic(bundle, JSON.stringify({
+      workorder: 'inputs/<attempt>/workorder.md', guidance: 'inputs/<attempt>/owner/',
+      skills: 'inputs/<attempt>/skills/', outcome: m.outcome, acceptance: m.acceptance,
+      validate: m.validate, attempts, status: m.status, outcome_at: m.outcome_at,
+    }, null, 2) + '\n');
+  }
   writeAtomic(p('work', m.id, 'outcome.md'), [
     `# ${m.id} outcome: ${m.status}`, '', m.outcome_summary ?? '', '', `**Next action:** ${m.next_action ?? 'none'}`, '',
     `- Kind: ${m.kind ?? 'code'}`,
