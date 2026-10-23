@@ -38,6 +38,12 @@ export function command(r: Route, prompt: string, cwd: string, outDir: string, a
   throw new Error(`unsupported harness "${r.harness}"`);
 }
 
+export function interactiveCommand(r: Route, prompt: string): { cmd: string; args: string[] } {
+  if (r.harness === 'claude') return { cmd: 'claude', args: ['--model', r.model, prompt] };
+  if (r.harness === 'codex') return { cmd: 'codex', args: ['-m', r.model, prompt] };
+  throw new Error(`unsupported harness "${r.harness}"`);
+}
+
 export type RunResult = { exitCode: number | null; timedOut: boolean };
 
 export function runAgent(opts: {

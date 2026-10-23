@@ -54,7 +54,7 @@ All agents in the tests and walkthrough are **fixtures**. They prove the workflo
 | Claude `--permission-mode auto` without a terminal | unknown |
 | Codex `workspace-write` sandbox inside a worktree whose `.git` points at the main repo | unknown |
 | Whether Codex headless JSON reports usage in the shape `collect()` reads | unknown; if not, the ledger records no usage for that launch |
-| `qst open` (Herdr pane split and agent start) | not run against Phil's session |
+| `qst open` (interactive agent in current terminal) | not run against Phil's session |
 
 ## Blockers
 

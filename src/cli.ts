@@ -11,7 +11,7 @@ import { sweep, dryRun } from './sweep.ts';
 import { renderDigest, writeDigest, ackDigest } from './digest.ts';
 import { recordObservation, loadPolicy, launchesToday, latestObservation } from './capacity.ts';
 import { writeOutcome, skillPath } from './construction.ts';
-import { route } from './agents.ts';
+import { route, interactiveCommand } from './agents.ts';
 
 const HELP = `qst - quick support team launcher (desk: ${deskDir()})
 
@@ -27,7 +27,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
   qst reconcile WO-ID --retry | --fail REASON
   qst capacity [observe --provider P --kind provider|estimate --source SRC [--used-pct N --resets-at T --observed-at T --note X]]
-  qst open chief-of-staff|architecture       open an interactive desk session in a Herdr pane (inside Herdr only)
+  qst open chief-of-staff|architecture       run an interactive desk session in this terminal
   qst help                                   show this command list
 `;
 
@@ -176,24 +176,16 @@ function capacity(sub?: string): number {
   return 0;
 }
 
-function herdr(...args: string[]): any {
-  const r = spawnSync('herdr', args, { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`herdr ${args.join(' ')} failed: ${r.stderr || r.stdout}`);
-  return r.stdout.trim().startsWith('{') ? JSON.parse(r.stdout) : r.stdout;
-}
-
 function openDesk(desk?: string): number {
-  const roles: Record<string, [string, string, string]> = { 'chief-of-staff': ['executive', 'chief-of-staff', 'qst-cos'], architecture: ['architecture', 'architecture-desk', 'qst-arch'] };
+  const roles: Record<string, [string, string]> = { 'chief-of-staff': ['executive', 'chief-of-staff'], architecture: ['architecture', 'architecture-desk'] };
   if (!desk || !roles[desk]) throw new Error('usage: qst open chief-of-staff|architecture');
-  if (process.env.HERDR_ENV !== '1') throw new Error('not running inside a Herdr pane; start this from a Herdr pane, or run `claude` yourself and say: "Read and follow ' + skillPath(roles[desk][1]) + '"');
-  const [role, skill, name] = roles[desk];
+  const [role, skill] = roles[desk];
   const r = route(role);
-  const pane = herdr('pane', 'split', '--current', '--direction', 'right', '--cwd', deskDir(), '--no-focus').result.pane.pane_id;
-  const modelArgs = r.harness === 'codex' ? ['-m', r.model] : ['--model', r.model];
-  herdr('agent', 'start', name, '--kind', r.harness, '--pane', pane, '--', ...modelArgs);
-  herdr('agent', 'prompt', name, `Read and follow ${skillPath(skill)} (interactive session with Phil). Desk: ${deskDir()}. Start by reading ${p('digest.md')}.`);
-  console.log(`${desk} session "${name}" started in pane ${pane}`);
-  return 0;
+  const prompt = `Read and follow ${skillPath(skill)} (interactive session with Phil). Desk: ${deskDir()}. Start by reading ${p('digest.md')}.`;
+  const { cmd, args } = interactiveCommand(r, prompt);
+  const result = spawnSync(cmd, args, { cwd: deskDir(), stdio: 'inherit' });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
 }
 
 main().then((code) => process.exit(code), (e) => { console.error(`qst: ${e.message}`); process.exit(1); });

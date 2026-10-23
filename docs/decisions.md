@@ -6,7 +6,7 @@ Recorded at build time (2026-10-21). Update this file when a decision changes; d
 
 | # | Decision | Why |
 |---|---|---|
-| 1 | **Sweeps start agents as headless child processes** (`claude -p`, `codex exec`) with timeouts. Herdr is used only for interactive desk sessions (`qst open`) | Cron runs outside Herdr, and Herdr's own skill forbids controlling a session from outside a Herdr pane. Headless runs work the same from cron or by hand, and give an exit code and output files to check. A scheduler loop inside a Herdr pane wouldn't survive a Herdr restart and isn't cron |
+| 1 | **Sweeps start agents as headless child processes** (`claude -p`, `codex exec`) with timeouts. Interactive desk sessions (`qst open`) run in the current terminal | Cron runs outside Herdr. Headless runs work the same from cron or by hand, and give an exit code and output files to check. A scheduler loop inside a Herdr pane wouldn't survive a Herdr restart and isn't cron |
 | 2 | **Review is a separate agent session, not necessarily a different harness** | Phil's clarification. Routing lives in `owner/routing.md` and can change |
 | 3 | **Initial routing:** implement → Codex `gpt-6-luna`; review, architecture, executive → Claude `opus` | Phil: implementation mostly to Codex (Luna or Sonnet); review with Opus or Sol; design and higher-order work to Claude; UI design and prototypes Opus only; grilling interactive with Opus, Sol or Astra (on request). Fuller guidance from Phil is still to come |
 | 4 | **No change to Phil's Claude status line** | Phil took the "no action" recommendation. Provider usage can still be recorded by hand with `qst capacity observe` |

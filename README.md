@@ -23,7 +23,7 @@ qst init              # creates the desk; autonomous metered execution starts DI
 
 | You want to... | Do |
 |---|---|
-| Give context or decisions | In a Herdr pane run `qst open chief-of-staff` (or start `claude` and say "use the chief-of-staff skill"), then talk |
+| Give context or decisions | Run `qst open chief-of-staff` in a terminal, then talk; it starts the routed interactive agent in that terminal |
 | See decisions and outcomes | `qst digest` (then `qst digest --ack`) |
 | See what a sweep would do | `qst sweep --dry-run` |
 | Run one sweep yourself | `qst sweep --owner` (you are authorizing its metered launches) |

@@ -2,7 +2,7 @@
 
 ## Supplying context through an agent
 
-Talk to the Chief of Staff in an agent session. The usual way is `qst open chief-of-staff` from a Herdr pane. It splits a sibling pane, starts the agent routed for `executive` (Claude Opus by default), and points it at the skill. Outside Herdr, start `claude` and say "use the chief-of-staff skill".
+Talk to the Chief of Staff in an agent session by running `qst open chief-of-staff` in a terminal. It starts the agent routed for `executive` (Claude Opus by default) in that terminal, with the working directory set to the desk. Run `qst open architecture` for the architecture desk.
 
 As you talk, the agent records each statement as an attributed **signal** (`signals/`), in one of five kinds:
 
@@ -109,7 +109,7 @@ Before any model is started, a free check exits if there is no actionable work, 
 
 ## Scheduling
 
-Cron runs outside Herdr, and Herdr's rules forbid controlling a session from outside, so **sweeps never use Herdr**. They start agents as headless child processes (`claude -p`, `codex exec`) with timeouts. That works the same from cron or by hand. Herdr is only for interactive desk sessions (`qst open`).
+**Sweeps never use Herdr.** They start agents as headless child processes (`claude -p`, `codex exec`) with timeouts. That works the same from cron or by hand. Interactive desk sessions (`qst open`) run in the terminal where the command is issued, whether or not it is inside Herdr.
 
 Proposed crontab entry. **Not installed;** it needs Phil's approval, and the desk folder must exist first:
 
