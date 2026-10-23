@@ -103,19 +103,20 @@ function integrate(id?: string): number {
       if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${(r.stderr || r.stdout).trim()}`);
       return r.stdout.trim();
     };
-    if (git(repo, 'branch', '--show-current') !== 'main') throw new Error(`project must be checked out on main in ${repo}`);
+    const projectBranch = git(repo, 'branch', '--show-current');
+    if (!projectBranch) throw new Error(`project must be checked out on its integration branch in ${repo}`);
     if (git(repo, 'status', '--porcelain')) throw new Error(`project has uncommitted changes in ${repo}`);
     if (git(wo.meta.worktree, 'branch', '--show-current') !== wo.meta.branch) throw new Error(`${id} worktree is not on branch ${wo.meta.branch}`);
     if (git(wo.meta.worktree, 'status', '--porcelain')) throw new Error(`${id} worktree has uncommitted changes`);
     const base = wo.meta.base;
-    const main = git(repo, 'rev-parse', 'main');
-    if (base !== main) {
-      const rebase = spawnSync('git', ['rebase', 'main'], { cwd: wo.meta.worktree, encoding: 'utf8' });
+    const target = git(repo, 'rev-parse', projectBranch);
+    if (base !== target) {
+      const rebase = spawnSync('git', ['rebase', projectBranch], { cwd: wo.meta.worktree, encoding: 'utf8' });
       if (rebase.status !== 0) {
         spawnSync('git', ['rebase', '--abort'], { cwd: wo.meta.worktree, encoding: 'utf8' });
-        throw new Error(`git rebase main failed: ${(rebase.stderr || rebase.stdout).trim()}`);
+        throw new Error(`git rebase ${projectBranch} failed: ${(rebase.stderr || rebase.stdout).trim()}`);
       }
-      wo.meta.commit = git(wo.meta.worktree, 'rev-parse', 'HEAD');
+      Object.assign(wo.meta, { base: target, commit: git(wo.meta.worktree, 'rev-parse', 'HEAD') });
       saveRec(wo);
     }
     const merge = spawnSync('git', ['merge', '--no-edit', wo.meta.branch], { cwd: repo, encoding: 'utf8' });
@@ -125,7 +126,8 @@ function integrate(id?: string): number {
     }
     Object.assign(wo.meta, { status: 'integrated', integrated: iso(), next_action: 'none' });
     saveRec(wo);
-    log(`${id} integrated into main (${git(repo, 'rev-parse', 'HEAD').slice(0, 8)})`);
+    writeOutcome(wo);
+    log(`${id} integrated into ${projectBranch} (${git(repo, 'rev-parse', 'HEAD').slice(0, 8)})`);
     return 0;
   } finally { release(); }
 }
