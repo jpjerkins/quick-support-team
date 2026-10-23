@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { setup, qst, script, calls, wo, approvedWorkOrder, EXEC_EMPTY, IMPL_DONE, IMPL_BROKEN, REVIEW_OK } from './helpers.ts';
+import { command, route } from '../src/agents.ts';
 
 test('approved work order reaches ready-for-integration with real tests, a commit and a separate review', () => {
   const e = setup();
@@ -59,6 +60,21 @@ test('work order slugs are shown and accepted anywhere a work order id is used',
 });
 
 test('Claude implementer override is recorded and charged to Claude', () => {
+  const harness = process.env.QST_AGENT_HARNESS;
+  delete process.env.QST_AGENT_HARNESS;
+  try {
+    const launch = command(route('implement', { provider: 'claude', model: 'sonnet' }), 'prompt', '.', '.', 'write');
+    assert.equal(launch.cmd, 'claude');
+    assert.ok(launch.args.includes('-p'));
+    assert.ok(launch.args.includes('--model'));
+    assert.ok(launch.args.includes('sonnet'));
+    assert.ok(launch.args.includes('--permission-mode'));
+    assert.ok(launch.args.includes('auto'));
+  } finally {
+    if (harness === undefined) delete process.env.QST_AGENT_HARNESS;
+    else process.env.QST_AGENT_HARNESS = harness;
+  }
+
   const e = setup();
   qst(e, 'ingest', 'project', '--slug', 'tiny', '--name', 'Tiny', '--state', 'building', '--repo', e.repo, '--validate', 'node test.js', '--text', 'SAMPLE project', '--source', 'test');
   const id = qst(e, 'workorder', 'add', '--project', 'tiny', '--outcome', 'Change it', '--accept', 'works', '--source', 'test', '--implementer', 'claude:sonnet').out.trim();

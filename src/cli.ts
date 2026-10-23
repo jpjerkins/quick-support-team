@@ -68,9 +68,8 @@ async function main(): Promise<number> {
       if (sub === 'integrate') return integrate(pos[2]);
       if (sub !== 'add') throw new Error('usage: qst workorder add ... | qst workorder integrate WO-ID');
       if (!o.project || !o.outcome || !o.source) throw new Error('--project, --outcome and --source are required');
-      const implementer = o.implementer?.match(/^(claude|codex):(.+)$/);
-      if (o.implementer && !implementer) throw new Error('--implementer must be claude:MODEL or codex:MODEL');
-      console.log(createWorkOrder({ kind: o.kind, project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source, implementer: implementer ? { provider: implementer[1], model: implementer[2] } : undefined }));
+      const [provider, ...model] = o.implementer?.split(':') ?? [];
+      console.log(createWorkOrder({ kind: o.kind, project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source, implementer: o.implementer ? { provider, model: model.join(':') } : undefined }));
       return 0;
     }
     case 'sweep':

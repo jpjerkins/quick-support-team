@@ -18,7 +18,7 @@ export function route(role: string, implementer?: { provider: string; model: str
 
 const READ_TOOLS = ['Read', 'Grep', 'Glob', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)', 'Bash(git status:*)'];
 
-function command(r: Route, prompt: string, cwd: string, outDir: string, access: Access): { cmd: string; args: string[]; stdin?: string } {
+export function command(r: Route, prompt: string, cwd: string, outDir: string, access: Access): { cmd: string; args: string[]; stdin?: string } {
   if (r.harness === 'claude') {
     const perms = access === 'write' ? ['--permission-mode', 'auto'] : ['--permission-mode', 'dontAsk', '--allowedTools', ...READ_TOOLS];
     return { cmd: 'claude', args: ['-p', prompt, '--model', r.model, '--output-format', 'json', ...perms] };
