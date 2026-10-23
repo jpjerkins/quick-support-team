@@ -83,6 +83,21 @@ test('integrate merges without rebasing when the checked-out project branch has 
   assert.equal(wo(e, id).status, 'integrated');
 });
 
+test('integrated work orders are hidden from listings but remain available by status id', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  const file = `${e.desk}/work/${id}/workorder.md`;
+  const record = wo(e, id);
+  Object.assign(record, { status: 'integrated', outcome_at: new Date().toISOString(), outcome_summary: 'merged', next_action: 'none' });
+  const body = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---/, `---\n${JSON.stringify(record, null, 2)}\n---`);
+  fs.writeFileSync(file, body);
+
+  assert.doesNotMatch(qst(e, 'status').out, new RegExp(id));
+  const detail = qst(e, 'status', id).out;
+  assert.match(detail, new RegExp(id));
+  assert.match(detail, /status: integrated/);
+});
+
 test('research work order needs no repo or validation and completes from cited evidence', () => {
   const e = setup();
   qst(e, 'ingest', 'project', '--slug', 'topic', '--text', 'Research topic', '--source', 'test');

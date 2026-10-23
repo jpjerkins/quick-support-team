@@ -17,7 +17,7 @@ export const isNew = (d: Rec, acked: Record<string, string>) => acked[d.meta.id]
 export function renderDigest(): string {
   const acked = readState().acked ?? {};
   const ds = openDecisions();
-  const wos = listWOs();
+  const wos = listWOs().filter((w) => w.meta.status !== 'integrated');
   const out: string[] = [`# Digest (${iso().slice(0, 16)}Z)`, ''];
 
   out.push(`## Decisions for you: ${ds.length} open, ${ds.filter((d) => isNew(d, acked)).length} new`, '');
