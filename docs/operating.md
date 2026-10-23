@@ -20,7 +20,7 @@ For grilling or brainstorming, use whichever model you like interactively. `owne
 
 ## How a work order reaches a reviewed result
 
-1. **Propose:** `qst workorder add` (you, or a Chief of Staff proposal). Work orders default to `--kind code`; code orders use acceptance criteria and validation commands from the project record unless given. Use `--kind research` for read-only, evidence-based work; it needs a project record but no repo or validation commands. The only kinds are `code` and `research`.
+1. **Propose:** `qst workorder add` (you, or a Chief of Staff proposal); pass `--implementer claude:MODEL` or `codex:MODEL` to override the implement route. Work orders default to `--kind code`; code orders use acceptance criteria and validation commands from the project record unless given. Use `--kind research` for read-only, evidence-based work; it needs a project record but no repo or validation commands. The only kinds are `code` and `research`.
 2. **Approve:** `qst ingest decision --approve WO-...`. Nothing is dispatched without this.
 3. **Sweep** (coordinator; one active assignment at a time):
    - For `code`, creates worktree `desk/worktrees/WO-...` on branch `qst/WO-...` from the repo's HEAD. For `research`, creates `work/WO-.../scratch` instead; the implementer works read-only, then a separate reviewer checks the cited evidence.

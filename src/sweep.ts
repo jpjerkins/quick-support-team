@@ -80,7 +80,7 @@ export function dryRun(opts: { owner: boolean }): string[] {
   }
   const wo = selectWO(skip);
   const verdict = (role: string) => {
-    const r = route(role);
+    const r = route(role, role === 'implement' ? wo?.meta.implementer : undefined);
     const v = checkLaunch(r.provider, { owner: opts.owner, launchesThisSweep: 0 });
     return `${role} via ${r.harness}/${r.model}: ${v.ok ? 'ALLOWED' : `BLOCKED (${v.reason})`}`;
   };

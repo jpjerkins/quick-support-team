@@ -58,6 +58,20 @@ test('work order slugs are shown and accepted anywhere a work order id is used',
   assert.equal(qst(e, 'reconcile', slug, '--retry').code, 1, 'slug lookup still enforces the command state');
 });
 
+test('Claude implementer override is recorded and charged to Claude', () => {
+  const e = setup();
+  qst(e, 'ingest', 'project', '--slug', 'tiny', '--name', 'Tiny', '--state', 'building', '--repo', e.repo, '--validate', 'node test.js', '--text', 'SAMPLE project', '--source', 'test');
+  const id = qst(e, 'workorder', 'add', '--project', 'tiny', '--outcome', 'Change it', '--accept', 'works', '--source', 'test', '--implementer', 'claude:sonnet').out.trim();
+  qst(e, 'ingest', 'decision', '--approve', id, '--text', 'approved', '--source', 'test');
+  script(e, { sonnet: [{ json: { status: 'done', summary: 'done' } }] });
+  qst(e, 'sweep');
+  const m = wo(e, id);
+  assert.equal(m.attempts[0].provider, 'claude');
+  assert.equal(m.attempts[0].model, 'sonnet');
+  const ledger = fs.readFileSync(`${e.desk}/capacity/ledger.jsonl`, 'utf8');
+  assert.match(ledger, /"provider":"claude","model":"sonnet","role":"implement"/);
+});
+
 test('integrate rejects a work order outside ready-for-integration before touching git', () => {
   const e = setup();
   const id = approvedWorkOrder(e);

@@ -26,13 +26,14 @@ export function listWOs(): Rec[] {
   return fs.existsSync(dir) ? fs.readdirSync(dir).sort().map((id) => readRec(woFile(id))).filter((r): r is Rec => !!r) : [];
 }
 
-export function createWorkOrder(w: { kind?: string; project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number; actionId?: string }): string {
+export function createWorkOrder(w: { kind?: string; project: string; outcome: string; acceptance: string[]; validate?: string[]; departures?: string[]; source: string; rank?: number; actionId?: string; implementer?: { provider: string; model: string } }): string {
   if (w.actionId) {
     const existing = listWOs().find((r) => r.meta.action_id === w.actionId);
     if (existing) return existing.meta.id;
   }
   const kind = w.kind ?? 'code';
   if (!['code', 'research'].includes(kind)) throw new Error('--kind must be code|research');
+  if (w.implementer && (!['claude', 'codex'].includes(w.implementer.provider) || !w.implementer.model.trim())) throw new Error('--implementer must be claude:MODEL or codex:MODEL');
   const proj = readRec(p('portfolio', `${w.project}.md`));
   if (!proj) throw new Error(`unknown project "${w.project}"; record it first with: qst ingest project --slug ${w.project} ...`);
   if (kind === 'code' && !proj.meta.repo) throw new Error(`project "${w.project}" has no repo`);
@@ -41,7 +42,7 @@ export function createWorkOrder(w: { kind?: string; project: string; outcome: st
   if (!w.acceptance.length) throw new Error('at least one --accept criterion is required');
   const id = newId('WO');
   const meta = {
-    id, slug: newSlug(), kind, project: w.project, ...(proj.meta.repo ? { repo: proj.meta.repo } : {}), outcome: w.outcome, acceptance: w.acceptance, validate,
+    id, slug: newSlug(), kind, project: w.project, ...(proj.meta.repo ? { repo: proj.meta.repo } : {}), outcome: w.outcome, acceptance: w.acceptance, validate, ...(w.implementer ? { implementer: w.implementer } : {}),
     departures: w.departures ?? [], rank: w.rank ?? 100, source: w.source, ...(w.actionId ? { action_id: w.actionId } : {}), created: iso(), status: 'proposed',
     corrections_used: 0, max_corrections: 1, attempts: [], questions: [], validations: [], reviews: [],
   };

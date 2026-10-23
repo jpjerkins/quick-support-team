@@ -59,7 +59,7 @@ function preserveAssignment(wo: Rec, attemptId: string, skill: string): void {
 
 // Records dispatch intent before the agent starts, then the returned identity and exit.
 async function launch(wo: Rec, role: string, skill: string, prompt: string, access: Access, ctx: Ctx): Promise<boolean> {
-  const r = route(role);
+  const r = route(role, role === 'implement' ? wo.meta.implementer : undefined);
   const v = checkLaunch(r.provider, { owner: ctx.owner, launchesThisSweep: ctx.launches });
   const timeoutMs = Math.min(v.timeoutMs, ctx.deadline - Date.now());
   if (!v.ok || timeoutMs < 30_000) {

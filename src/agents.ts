@@ -9,7 +9,8 @@ export type Access = 'write' | 'read';
 
 // Roles are routed by owner/routing.md. QST_AGENT_HARNESS=fixture swaps the
 // harness for deterministic test agents while keeping provider accounting.
-export function route(role: string): Route {
+export function route(role: string, implementer?: { provider: string; model: string }): Route {
+  if (role === 'implement' && implementer) return { ...implementer, harness: process.env.QST_AGENT_HARNESS ?? implementer.provider };
   const r = readRec(p('owner', 'routing.md'))?.meta?.roles?.[role];
   if (!r?.provider || !r?.model) throw new Error(`no route for role "${role}" in owner/routing.md`);
   return { provider: r.provider, model: r.model, harness: process.env.QST_AGENT_HARNESS ?? r.harness ?? r.provider };
