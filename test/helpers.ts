@@ -28,7 +28,7 @@ export function setup(policy: object = PERMISSIVE): Env {
     spawnSync('git', args, { cwd: repo });
   }
   const env = {
-    ...process.env, QST_DESK: desk, QST_AGENT_HARNESS: 'fixture',
+    ...process.env, QST_DESK: desk, QST_WORKTREES: path.join(root, 'worktrees'), QST_AGENT_HARNESS: 'fixture',
     QST_FIXTURE_AGENT: path.join(ROOT, 'test', 'fixtures', 'agent.ts'),
     QST_FIXTURE_SCRIPT: path.join(root, 'script.json'), QST_FIXTURE_LOG: path.join(root, 'agents.jsonl'),
   };

@@ -27,6 +27,22 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
 });
 
+test('new code worktrees use QST_WORKTREES or the user data directory', () => {
+  for (const [setting, expected] of [
+    ['default', (e: ReturnType<typeof setup>, id: string) => `${e.root}/home/.local/share/quick-support-team/worktrees/${id}`],
+    ['override', (e: ReturnType<typeof setup>, id: string) => `${e.root}/custom-worktrees/${id}`],
+  ] as const) {
+    const e = setup();
+    e.env.HOME = `${e.root}/home`;
+    if (setting === 'override') e.env.QST_WORKTREES = `${e.root}/custom-worktrees`;
+    else delete e.env.QST_WORKTREES;
+    const id = approvedWorkOrder(e);
+    script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+    assert.equal(qst(e, 'sweep').code, 0);
+    assert.equal(wo(e, id).worktree, expected(e, id));
+  }
+});
+
 test('finished run preserves an immutable bundle of assignment, guidance, and used skills', () => {
   const e = setup();
   const id = approvedWorkOrder(e);

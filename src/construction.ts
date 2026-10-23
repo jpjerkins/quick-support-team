@@ -1,6 +1,7 @@
 // Construction workflow: advances one approved work order by one step per call.
 // Agents only propose; every status change below is the coordinator's decision.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { p, iso, newId, sha256File, installDir, readRec, writeAtomic, log } from './desk.ts';
@@ -151,7 +152,7 @@ function prepare(wo: Rec): Step {
     saveRec(wo);
     return 'progress';
   }
-  const wt = p('worktrees', wo.meta.id);
+  const wt = wo.meta.worktree ?? path.join(process.env.QST_WORKTREES ?? path.join(os.homedir(), '.local/share/quick-support-team/worktrees'), wo.meta.id);
   const branch = `qst/${wo.meta.id}`;
   if (!fs.existsSync(wt)) git(wo.meta.repo, 'worktree', 'add', '-q', '-b', branch, wt, 'HEAD');
   Object.assign(wo.meta, { base: git(wt, 'rev-parse', 'HEAD'), branch, worktree: wt, status: 'ready' });
