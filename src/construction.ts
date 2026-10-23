@@ -58,7 +58,7 @@ function preserveAssignment(wo: Rec, attemptId: string, skill: string): void {
 }
 
 // Records dispatch intent before the agent starts, then the returned identity and exit.
-async function launch(wo: Rec, role: string, skill: string, prompt: string, access: Access, ctx: Ctx): Promise<boolean> {
+async function launch(wo: Rec, role: string, skill: string, prompt: (attempt: Record<string, any>) => string, access: Access, ctx: Ctx): Promise<boolean> {
   const r = route(role, role === 'implement' ? wo.meta.implementer : undefined);
   const v = checkLaunch(r.provider, { owner: ctx.owner, launchesThisSweep: ctx.launches });
   const timeoutMs = Math.min(v.timeoutMs, ctx.deadline - Date.now());
@@ -74,6 +74,12 @@ async function launch(wo: Rec, role: string, skill: string, prompt: string, acce
     id, role, status: 'dispatched', started: iso(), provider: r.provider, model: r.model, harness: r.harness,
     out_dir: p('work', wo.meta.id, 'attempts', id), snapshots: snapshots(skill),
   };
+  fs.mkdirSync(attempt.out_dir, { recursive: true });
+  if (role === 'review' && kindOf(wo) === 'code') {
+    const diff = spawnSync('git', ['diff', `${wo.meta.base}..${wo.meta.commit}`], { cwd: wo.meta.worktree, encoding: 'utf8' });
+    if (diff.status !== 0) throw new Error(`git diff ${wo.meta.base}..${wo.meta.commit} failed: ${diff.stderr}`);
+    fs.writeFileSync(path.join(attempt.out_dir, 'change.diff'), diff.stdout);
+  }
   preserveAssignment(wo, id, skill);
   wo.meta.attempts.push(attempt);
   saveRec(wo);
@@ -81,7 +87,7 @@ async function launch(wo: Rec, role: string, skill: string, prompt: string, acce
   ctx.launches++;
   log(`${wo.meta.id} launched ${role} ${id} (${r.harness}/${r.model})`);
   const res = await runAgent({
-    route: r, prompt, cwd: wo.meta.scratch ?? wo.meta.worktree, outDir: attempt.out_dir, access, timeoutMs,
+    route: r, prompt: prompt(attempt), cwd: wo.meta.scratch ?? wo.meta.worktree, outDir: attempt.out_dir, access, timeoutMs,
     onSpawn: (pid) => { attempt.pid = pid; attempt.status = 'running'; saveRec(wo); },
   });
   Object.assign(attempt, { status: 'returned', ended: iso(), exit: res.exitCode, timed_out: res.timedOut, usage: collect(r.harness, attempt.out_dir).usage });
@@ -101,8 +107,8 @@ function take(a: any): { result: any; errors: string[] } {
   return { result, errors };
 }
 
-async function attemptFor(wo: Rec, role: string, skill: string, prompt: () => string, access: Access, ctx: Ctx) {
-  if (!pending(wo, role) && !(await launch(wo, role, skill, prompt(), access, ctx))) return null;
+async function attemptFor(wo: Rec, role: string, skill: string, prompt: (attempt: Record<string, any>) => string, access: Access, ctx: Ctx) {
+  if (!pending(wo, role) && !(await launch(wo, role, skill, prompt, access, ctx))) return null;
   return pending(wo, role);
 }
 
@@ -210,7 +216,7 @@ function validate(wo: Rec): Step {
 }
 
 async function review(wo: Rec, ctx: Ctx): Promise<Step> {
-  const a = await attemptFor(wo, 'review', 'construction-review', () => reviewPrompt(wo), 'read', ctx);
+  const a = await attemptFor(wo, 'review', 'construction-review', (attempt) => reviewPrompt(wo, attempt), 'read', ctx);
   if (!a) return 'wait';
   const { result, errors: base } = take(a);
   const errors = resultErrors(wo, 'review', result, base);
@@ -311,7 +317,7 @@ function implementPrompt(wo: Rec): string {
   ].filter(Boolean).join('\n\n');
 }
 
-function reviewPrompt(wo: Rec): string {
+function reviewPrompt(wo: Rec, attempt: Record<string, any>): string {
   const v = wo.meta.validations.at(-1);
   const impl = wo.meta.attempts.findLast((a: any) => a.role === 'implement' && a.summary);
   return [
@@ -319,7 +325,7 @@ function reviewPrompt(wo: Rec): string {
     `Assignment: ${woFile(wo.meta.id)}`,
     kindOf(wo) === 'research'
       ? `Review the research result against every acceptance criterion. Check each cited source and judge whether it supports the finding. Return assessments: [{criterion, evidence, result: met|unmet}] using source citations.`
-      : `Review the change in ${wo.meta.worktree} with: git diff ${wo.meta.base}..${wo.meta.commit}`,
+      : `Review the change in ${path.join(attempt.out_dir, 'change.diff')}`,
     kindOf(wo) === 'code' && `Validation run by the coordinator (${v.id}): ${v.results.map((r: any) => `\`${r.cmd}\` exit ${r.exit}, log ${r.log}`).join('; ')}`,
     `Implementer's summary (a claim, not evidence): ${impl?.summary ?? '(none)'}`,
     kindOf(wo) === 'research' && `Implementer's cited evidence: ${JSON.stringify(impl?.evidence ?? [])}`,

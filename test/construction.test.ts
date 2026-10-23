@@ -18,6 +18,11 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   assert.equal(calls(e, 'implement').length, 1);
   assert.equal(calls(e, 'review').length, 1);
   assert.notEqual(calls(e, 'implement')[0].pid, calls(e, 'review')[0].pid);
+  const reviewAttempt = m.attempts.find((a: any) => a.role === 'review');
+  const diffFile = `${reviewAttempt.out_dir}/change.diff`;
+  const expectedDiff = spawnSync('git', ['diff', `${m.base}..${m.commit}`], { cwd: m.worktree, encoding: 'utf8' }).stdout;
+  assert.equal(fs.readFileSync(diffFile, 'utf8'), expectedDiff);
+  assert.ok(calls(e, 'review')[0].prompt.includes(diffFile));
   assert.ok(m.attempts[0].snapshots['skills/construction-implement']);
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
 });
