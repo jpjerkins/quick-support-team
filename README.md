@@ -28,6 +28,7 @@ qst init              # creates the desk; autonomous metered execution starts DI
 | See what a sweep would do | `qst sweep --dry-run` |
 | Run one sweep yourself | `qst sweep --owner` (you are authorizing its metered launches) |
 | Inspect a work order | `qst status WO-...` |
+| Integrate reviewed work | `qst workorder integrate WO-...` (project must be clean and checked out on `main`) |
 | Settle held work | `qst reconcile WO-... --retry` or `--fail "reason"` |
 
 ## Layout

@@ -21,6 +21,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst ingest decision --text T --source SRC [--approve WO-ID...] [--answers Q-ID] [--resolves D-ID]
   qst ingest observation|proposal --text T --source SRC --by WHO [--departure TITLE --project S]
   qst workorder add --project S --outcome O --accept A... [--validate CMD...] [--departure DEP-ID...] --source SRC
+  qst workorder integrate WO-ID                 merge ready work onto the project's main branch
   qst sweep [--dry-run] [--owner]            one bounded sweep (--owner: you are explicitly authorizing this run)
   qst status [WO-ID]                         digest, or one work order in detail
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
@@ -62,7 +63,8 @@ async function main(): Promise<number> {
       return 0;
     }
     case 'workorder': {
-      if (sub !== 'add') throw new Error('usage: qst workorder add ...');
+      if (sub === 'integrate') return integrate(pos[2]);
+      if (sub !== 'add') throw new Error('usage: qst workorder add ... | qst workorder integrate WO-ID');
       if (!o.project || !o.outcome || !o.source) throw new Error('--project, --outcome and --source are required');
       console.log(createWorkOrder({ project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source }));
       return 0;
@@ -84,6 +86,48 @@ async function main(): Promise<number> {
     case 'open': return openDesk(sub);
     default: throw new Error(`unknown command "${cmd}"\n\n${HELP}`);
   }
+}
+
+function integrate(id?: string): number {
+  if (!id) throw new Error('usage: qst workorder integrate WO-ID');
+  let wo = loadWO(id);
+  if (wo.meta.status !== 'ready-for-integration') throw new Error(`${id} is ${wo.meta.status}; only ready-for-integration work can be integrated`);
+  const release = acquireLock();
+  if (!release) throw new Error('a sweep holds the coordinator lock; try again when it finishes');
+  try {
+    wo = loadWO(id);
+    if (wo.meta.status !== 'ready-for-integration') throw new Error(`${id} is ${wo.meta.status}; only ready-for-integration work can be integrated`);
+    const repo = wo.meta.repo;
+    const git = (cwd: string, ...args: string[]) => {
+      const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${(r.stderr || r.stdout).trim()}`);
+      return r.stdout.trim();
+    };
+    if (git(repo, 'branch', '--show-current') !== 'main') throw new Error(`project must be checked out on main in ${repo}`);
+    if (git(repo, 'status', '--porcelain')) throw new Error(`project has uncommitted changes in ${repo}`);
+    if (git(wo.meta.worktree, 'branch', '--show-current') !== wo.meta.branch) throw new Error(`${id} worktree is not on branch ${wo.meta.branch}`);
+    if (git(wo.meta.worktree, 'status', '--porcelain')) throw new Error(`${id} worktree has uncommitted changes`);
+    const base = wo.meta.base;
+    const main = git(repo, 'rev-parse', 'main');
+    if (base !== main) {
+      const rebase = spawnSync('git', ['rebase', 'main'], { cwd: wo.meta.worktree, encoding: 'utf8' });
+      if (rebase.status !== 0) {
+        spawnSync('git', ['rebase', '--abort'], { cwd: wo.meta.worktree, encoding: 'utf8' });
+        throw new Error(`git rebase main failed: ${(rebase.stderr || rebase.stdout).trim()}`);
+      }
+      wo.meta.commit = git(wo.meta.worktree, 'rev-parse', 'HEAD');
+      saveRec(wo);
+    }
+    const merge = spawnSync('git', ['merge', '--no-edit', wo.meta.branch], { cwd: repo, encoding: 'utf8' });
+    if (merge.status !== 0) {
+      spawnSync('git', ['merge', '--abort'], { cwd: repo, encoding: 'utf8' });
+      throw new Error(`git merge ${wo.meta.branch} failed: ${(merge.stderr || merge.stdout).trim()}`);
+    }
+    Object.assign(wo.meta, { status: 'integrated', integrated: iso(), next_action: 'none' });
+    saveRec(wo);
+    log(`${id} integrated into main (${git(repo, 'rev-parse', 'HEAD').slice(0, 8)})`);
+    return 0;
+  } finally { release(); }
 }
 
 function reconcile(id: string): number {
