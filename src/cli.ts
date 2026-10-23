@@ -28,6 +28,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst reconcile WO-ID --retry | --fail REASON
   qst capacity [observe --provider P --kind provider|estimate --source SRC [--used-pct N --resets-at T --observed-at T --note X]]
   qst open chief-of-staff|architecture       open an interactive desk session in a Herdr pane (inside Herdr only)
+  qst help                                   show this command list
 `;
 
 const { values: o, positionals: pos } = parseArgs({
@@ -49,7 +50,7 @@ function needDesk(): void {
 
 async function main(): Promise<number> {
   const [cmd, sub] = pos;
-  if (!cmd || o.help) { console.log(HELP); return 0; }
+  if (!cmd || cmd === 'help' || o.help) { console.log(HELP); return 0; }
   if (cmd === 'init') { ensureDesk(path.join(installDir(), 'templates', 'desk')); console.log(`desk ready at ${deskDir()}`); return 0; }
   needDesk();
   switch (cmd) {
