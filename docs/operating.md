@@ -20,10 +20,10 @@ For grilling or brainstorming, use whichever model you like interactively. `owne
 
 ## How a work order reaches a reviewed result
 
-1. **Propose:** `qst workorder add` (you, or a Chief of Staff proposal). The work order gets acceptance criteria and validation commands, taken from the project record unless given.
+1. **Propose:** `qst workorder add` (you, or a Chief of Staff proposal). Work orders default to `--kind code`; code orders use acceptance criteria and validation commands from the project record unless given. Use `--kind research` for read-only, evidence-based work; it needs a project record but no repo or validation commands. The only kinds are `code` and `research`.
 2. **Approve:** `qst ingest decision --approve WO-...`. Nothing is dispatched without this.
 3. **Sweep** (coordinator; one active assignment at a time):
-   - Creates worktree `desk/worktrees/WO-...` on branch `qst/WO-...` from the repo's HEAD, and records the base revision.
+   - For `code`, creates worktree `desk/worktrees/WO-...` on branch `qst/WO-...` from the repo's HEAD. For `research`, creates `work/WO-.../scratch` instead; the implementer works read-only, then a separate reviewer checks the cited evidence.
    - **Implement** with the `implement` route (Codex `gpt-6-luna`). The agent must end with a JSON result. A missing or malformed result never counts as done.
    - **Validate:** the coordinator runs the validation commands itself and logs to `work/WO/validations/`. If they fail, or there is no change, a correction attempt is used.
    - **Commit** locally on the work branch after the checks pass. Nothing is pushed or merged.
@@ -33,6 +33,7 @@ For grilling or brainstorming, use whichever model you like interactively. `owne
      - `blocked`: needs a decision or reconcile
      - `failed`: checks still failing after correction
      - `uncertain`: interrupted
+     - `complete`: research accepted against cited evidence
    - It is written to `work/WO/outcome.md` and appears in the digest. The Chief of Staff reviews new outcomes at its next executive run.
 
 Each work order record keeps:

@@ -5,7 +5,7 @@ A minimal executive and construction assistant for Phil's family software projec
 - **Chief of Staff** and **Architecture desk** skills hold judgement.
 - **`qst`** is a small deterministic launcher (TypeScript, Node 22 standard library, no dependencies). It handles locking, capacity limits, result validation and record keeping.
 - **The desk** is plain Markdown with JSON front matter. It lives at `/mnt/data/quick-support-team/desk` by default, or wherever `QST_DESK` points.
-- **One construction workflow:** approved work order → isolated worktree → implementer → coordinator runs the real tests → local commit → separate reviewer session → at most one correction → outcome.
+- **Work orders:** `code` (the default) uses the isolated worktree, validation and review flow; `research` uses a scratch directory, read-only research and evidence-based review. There is no `ops` kind.
 
 - [docs/status.md](docs/status.md): current state, verification evidence, blockers, pending approvals, live smoke test. **Start here in a new session.**
 - [docs/operating.md](docs/operating.md): how to supply context, the workflow, questions, capacity, pause and recovery, scheduling.

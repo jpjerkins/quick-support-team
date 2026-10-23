@@ -19,6 +19,16 @@ export function checkImplement(r: any): Errors {
   return e;
 }
 
+export function checkResearchImplement(r: any, acceptance: string[]): Errors {
+  const e = checkImplement(r);
+  if (r?.status === 'done') {
+    if (!Array.isArray(r.evidence) || acceptance.some((criterion) => !r.evidence.some((x: any) => x?.criterion === criterion && isStr(x?.citation) && isStr(x?.finding ?? x?.excerpt)))) {
+      e.push('evidence must cite a finding for every acceptance criterion');
+    }
+  }
+  return e;
+}
+
 export function checkReview(r: any): Errors {
   if (!r || typeof r !== 'object') return ['no JSON result'];
   const e: Errors = [];
@@ -28,6 +38,15 @@ export function checkReview(r: any): Errors {
     e.push('findings must be [{severity: blocking|minor, text}]');
   }
   if (r.verdict === 'approve' && r.findings?.some?.((f: any) => f.severity === 'blocking')) e.push('approve with blocking findings');
+  return e;
+}
+
+export function checkResearchReview(r: any, acceptance: string[]): Errors {
+  const e = checkReview(r);
+  if (!Array.isArray(r?.assessments) || acceptance.some((criterion) => !r.assessments.some((x: any) => x?.criterion === criterion && isStr(x?.evidence) && oneOf(x?.result, ['met', 'unmet'])))) {
+    e.push('assessments must cite evidence and decide every acceptance criterion');
+  }
+  if (r?.verdict === 'approve' && r.assessments?.some?.((x: any) => x.result !== 'met')) e.push('approve requires every research criterion to be met');
   return e;
 }
 

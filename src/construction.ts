@@ -9,7 +9,7 @@ import { saveRec, woFile, qFile, createQuestion, answerQuestion, questionText, a
 import { route, runAgent, collect, parseResult } from './agents.ts';
 import type { Access } from './agents.ts';
 import { checkLaunch, recordLaunch } from './capacity.ts';
-import { checkImplement, checkReview, checkArchitecture } from './schemas.ts';
+import { checkImplement, checkResearchImplement, checkReview, checkResearchReview, checkArchitecture } from './schemas.ts';
 import { pidAlive } from './lock.ts';
 import { ingest } from './signals.ts';
 
@@ -19,6 +19,15 @@ export type Step = 'progress' | 'wait';
 export const ACTIVE = ['ready', 'correcting', 'validating', 'reviewing', 'waiting-answer'];
 const MAX_QUESTIONS = 3;
 const CHECKS: Record<string, (r: any) => string[]> = { implement: checkImplement, review: checkReview, architecture: checkArchitecture };
+const kindOf = (wo: Rec) => wo.meta.kind ?? 'code';
+
+function resultErrors(wo: Rec, role: 'implement' | 'review', result: any, base: string[] = []): string[] {
+  const research = kindOf(wo) === 'research';
+  const specific = role === 'implement'
+    ? research ? checkResearchImplement(result, wo.meta.acceptance) : checkImplement(result)
+    : research ? checkResearchReview(result, wo.meta.acceptance) : checkReview(result);
+  return [...base, ...specific.filter((error) => !base.includes(error))];
+}
 
 export const skillPath = (name: string) => path.join(installDir(), 'skills', name, 'SKILL.md');
 export const guidanceFiles = () => ['priorities', 'constraints', 'technical', 'architecture'].map((t) => p('owner', `${t}.md`));
@@ -59,7 +68,7 @@ async function launch(wo: Rec, role: string, skill: string, prompt: string, acce
   ctx.launches++;
   log(`${wo.meta.id} launched ${role} ${id} (${r.harness}/${r.model})`);
   const res = await runAgent({
-    route: r, prompt, cwd: wo.meta.worktree, outDir: attempt.out_dir, access, timeoutMs,
+    route: r, prompt, cwd: wo.meta.scratch ?? wo.meta.worktree, outDir: attempt.out_dir, access, timeoutMs,
     onSpawn: (pid) => { attempt.pid = pid; attempt.status = 'running'; saveRec(wo); },
   });
   Object.assign(attempt, { status: 'returned', ended: iso(), exit: res.exitCode, timed_out: res.timedOut, usage: collect(r.harness, attempt.out_dir).usage });
@@ -116,6 +125,13 @@ export async function advance(wo: Rec, ctx: Ctx): Promise<Step> {
 }
 
 function prepare(wo: Rec): Step {
+  if (kindOf(wo) === 'research') {
+    const scratch = p('work', wo.meta.id, 'scratch');
+    fs.mkdirSync(scratch, { recursive: true });
+    Object.assign(wo.meta, { scratch, status: 'ready' });
+    saveRec(wo);
+    return 'progress';
+  }
   const wt = p('worktrees', wo.meta.id);
   const branch = `qst/${wo.meta.id}`;
   if (!fs.existsSync(wt)) git(wo.meta.repo, 'worktree', 'add', '-q', '-b', branch, wt, 'HEAD');
@@ -126,11 +142,15 @@ function prepare(wo: Rec): Step {
 }
 
 async function implement(wo: Rec, ctx: Ctx): Promise<Step> {
-  const a = await attemptFor(wo, 'implement', 'construction-implement', () => implementPrompt(wo), 'write', ctx);
+  const research = kindOf(wo) === 'research';
+  const a = await attemptFor(wo, 'implement', 'construction-implement', () => implementPrompt(wo), research ? 'read' : 'write', ctx);
   if (!a) return 'wait';
-  const { result, errors } = take(a);
+  const { result, errors: base } = take(a);
+  const errors = resultErrors(wo, 'implement', result, base);
+  a.result_ok = errors.length === 0;
   if (errors.length) return hold(wo, 'blocked', `implementer result rejected: ${errors.join('; ')}`, `inspect ${a.out_dir}, then qst reconcile ${wo.meta.id} --retry or --fail`);
   a.summary = result.summary;
+  if (research) a.evidence = result.evidence;
   if (result.status === 'blocked') return hold(wo, 'blocked', `implementer blocked: ${result.summary}`, 'chief-of-staff: review the blocker');
   if (result.status === 'question') {
     if (wo.meta.questions.length >= MAX_QUESTIONS) return hold(wo, 'blocked', `question limit (${MAX_QUESTIONS}) reached: ${result.question.text}`, 'chief-of-staff/owner: clarify the assignment');
@@ -141,7 +161,7 @@ async function implement(wo: Rec, ctx: Ctx): Promise<Step> {
     log(`${wo.meta.id} asked ${qid} -> ${result.question.desk}`);
     return 'progress';
   }
-  wo.meta.status = 'validating';
+  wo.meta.status = research ? 'reviewing' : 'validating';
   saveRec(wo);
   return 'progress';
 }
@@ -179,12 +199,15 @@ function validate(wo: Rec): Step {
 async function review(wo: Rec, ctx: Ctx): Promise<Step> {
   const a = await attemptFor(wo, 'review', 'construction-review', () => reviewPrompt(wo), 'read', ctx);
   if (!a) return 'wait';
-  const { result, errors } = take(a);
+  const { result, errors: base } = take(a);
+  const errors = resultErrors(wo, 'review', result, base);
+  a.result_ok = errors.length === 0;
   if (errors.length) return hold(wo, 'blocked', `review result rejected: ${errors.join('; ')}`, `inspect ${a.out_dir}, then qst reconcile ${wo.meta.id} --retry or --fail`);
-  wo.meta.reviews.push({ attempt: a.id, commit: wo.meta.commit, verdict: result.verdict, summary: result.summary, findings: result.findings });
+  wo.meta.reviews.push({ attempt: a.id, commit: wo.meta.commit, verdict: result.verdict, summary: result.summary, findings: result.findings, ...(kindOf(wo) === 'research' ? { assessments: result.assessments } : {}) });
   const text = result.findings.map((f: any) => `[${f.severity}] ${f.text}`).join('; ');
   if (result.verdict === 'approve') {
     wo.meta.unresolved = result.findings.length ? text : null;
+    if (kindOf(wo) === 'research') return hold(wo, 'complete', `research complete: ${result.summary}`, 'owner: inspect the cited evidence in the research result');
     return hold(wo, 'ready-for-integration', `ready: ${result.summary}`, `owner: inspect branch ${wo.meta.branch} (${wo.meta.commit.slice(0, 8)}) and merge if satisfied`);
   }
   return correctOrEnd(wo, `review findings: ${text}`, 'blocked');
@@ -235,7 +258,11 @@ export function recover(wo: Rec): 'ok' | 'busy' {
   const a = wo.meta.attempts?.find((x: any) => x.status === 'dispatched' || x.status === 'running');
   if (!a) return 'ok';
   if (a.pid && pidAlive(a.pid)) { log(`${wo.meta.id} attempt ${a.id} (pid ${a.pid}) is still running; leaving it alone`); return 'busy'; }
-  if (!CHECKS[a.role](parseResult(collect(a.harness, a.out_dir).text)).length) {
+  const result = parseResult(collect(a.harness, a.out_dir).text);
+  const errors = a.role === 'implement' || a.role === 'review'
+    ? resultErrors(wo, a.role, result)
+    : CHECKS[a.role](result);
+  if (!errors.length) {
     Object.assign(a, { status: 'returned', recovered: iso() });
     saveRec(wo);
     log(`${wo.meta.id} attempt ${a.id} recovered from its output after an interruption`);
@@ -243,7 +270,7 @@ export function recover(wo: Rec): 'ok' | 'busy' {
   }
   a.status = 'uncertain';
   hold(wo, 'uncertain', `attempt ${a.id} (${a.role}) was interrupted and its outcome cannot be established`,
-    `inspect ${a.out_dir} and ${wo.meta.worktree}; then qst reconcile ${wo.meta.id} --retry | --fail "<reason>"`);
+    `inspect ${a.out_dir}${wo.meta.worktree ? ` and ${wo.meta.worktree}` : ''}; then qst reconcile ${wo.meta.id} --retry | --fail "<reason>"`);
   return 'busy';
 }
 
@@ -259,9 +286,12 @@ function implementPrompt(wo: Rec): string {
   return [
     `You are the implementer for work order ${wo.meta.id}. Read and follow ${skillPath('construction-implement')}.`,
     `Assignment (outcome and acceptance criteria): ${woFile(wo.meta.id)}`,
-    `Your working directory is the isolated worktree ${wo.meta.worktree} (branch ${wo.meta.branch}). Do not commit, push, or merge; the coordinator commits after validation.`,
+    kindOf(wo) === 'research'
+      ? `Your working directory is the scratch directory ${wo.meta.scratch}. This is research work: read-only, with no side effects. Do not create, edit, or delete files, run commands that change state, or contact anyone. Cite a source for every acceptance criterion.`
+      : `Your working directory is the isolated worktree ${wo.meta.worktree} (branch ${wo.meta.branch}). Do not commit, push, or merge; the coordinator commits after validation.`,
     `Owner-approved guidance: ${guidanceFiles().join(', ')}`,
-    `The coordinator will run: ${wo.meta.validate.join(' ; ')}`,
+    kindOf(wo) === 'code' && `The coordinator will run: ${wo.meta.validate.join(' ; ')}`,
+    kindOf(wo) === 'research' && `End with evidence: [{criterion, citation, finding}] for every acceptance criterion.`,
     answered && `Answered questions:\n${answered}`,
     wo.meta.status === 'correcting' && `This is a correction attempt. Address: ${wo.meta.feedback}`,
     `End your reply with ${fence({ status: 'done|question|blocked', summary: '...', question: { text: '...', evidence: '...', requested_decision: '...', desk: 'architecture|chief-of-staff' } })} (omit "question" unless status is question).`,
@@ -274,11 +304,14 @@ function reviewPrompt(wo: Rec): string {
   return [
     `You are the reviewer for work order ${wo.meta.id}; you are a separate session from the implementer. Read and follow ${skillPath('construction-review')}.`,
     `Assignment: ${woFile(wo.meta.id)}`,
-    `Review the change in ${wo.meta.worktree} with: git diff ${wo.meta.base}..${wo.meta.commit}`,
-    `Validation run by the coordinator (${v.id}): ${v.results.map((r: any) => `\`${r.cmd}\` exit ${r.exit}, log ${r.log}`).join('; ')}`,
+    kindOf(wo) === 'research'
+      ? `Review the research result against every acceptance criterion. Check each cited source and judge whether it supports the finding. Return assessments: [{criterion, evidence, result: met|unmet}] using source citations.`
+      : `Review the change in ${wo.meta.worktree} with: git diff ${wo.meta.base}..${wo.meta.commit}`,
+    kindOf(wo) === 'code' && `Validation run by the coordinator (${v.id}): ${v.results.map((r: any) => `\`${r.cmd}\` exit ${r.exit}, log ${r.log}`).join('; ')}`,
     `Implementer's summary (a claim, not evidence): ${impl?.summary ?? '(none)'}`,
+    kindOf(wo) === 'research' && `Implementer's cited evidence: ${JSON.stringify(impl?.evidence ?? [])}`,
     `Owner-approved guidance: ${guidanceFiles().join(', ')}`,
-    `End your reply with ${fence({ verdict: 'approve|changes', summary: '...', findings: [{ severity: 'blocking|minor', text: '...' }] })}`,
+    `End your reply with ${fence(kindOf(wo) === 'research' ? { verdict: 'approve|changes', summary: '...', assessments: [{ criterion: '...', evidence: 'source citation', result: 'met|unmet' }], findings: [{ severity: 'blocking|minor', text: '...' }] } : { verdict: 'approve|changes', summary: '...', findings: [{ severity: 'blocking|minor', text: '...' }] })}`,
   ].join('\n\n');
 }
 
@@ -298,7 +331,8 @@ export function writeOutcome(wo: Rec): void {
   const r = m.reviews?.at(-1);
   writeAtomic(p('work', m.id, 'outcome.md'), [
     `# ${m.id} outcome: ${m.status}`, '', m.outcome_summary ?? '', '', `**Next action:** ${m.next_action ?? 'none'}`, '',
-    `- Project: ${m.project} (${m.repo}), base ${m.base ?? '-'}`,
+    `- Kind: ${m.kind ?? 'code'}`,
+    `- Project: ${m.project}${m.repo ? ` (${m.repo})` : ''}${m.base ? `, base ${m.base}` : ''}`,
     `- Branch: ${m.branch ?? '-'}, commit ${m.commit ?? '-'}`,
     `- Attempts: ${m.attempts.map((a: any) => `${a.id} ${a.role} ${a.status}${a.result_ok === false ? ' (rejected)' : ''}`).join('; ') || 'none'}`,
     `- Last validation: ${v ? `${v.id} ${v.passed ? 'passed' : 'failed'}: ${v.results.map((x: any) => `\`${x.cmd}\`=${x.exit}`).join(', ')}` : 'none'}`,

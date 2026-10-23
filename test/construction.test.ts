@@ -10,6 +10,7 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
   assert.equal(qst(e, 'sweep').code, 0);
   const m = wo(e, id);
+  assert.equal(m.kind, 'code');
   assert.equal(m.status, 'ready-for-integration');
   assert.equal(m.validations.at(-1).passed, true);
   assert.match(spawnSync('git', ['-C', m.worktree, 'log', '--oneline', '-1'], { encoding: 'utf8' }).stdout, new RegExp(id));
@@ -82,6 +83,30 @@ test('integrate merges without rebasing when the checked-out project branch has 
   assert.equal(wo(e, id).status, 'integrated');
 });
 
+test('research work order needs no repo or validation and completes from cited evidence', () => {
+  const e = setup();
+  qst(e, 'ingest', 'project', '--slug', 'topic', '--text', 'Research topic', '--source', 'test');
+  assert.notEqual(qst(e, 'workorder', 'add', '--kind', 'ops', '--project', 'topic', '--outcome', 'Bad kind', '--accept', 'x', '--source', 'test').code, 0);
+  const id = qst(e, 'workorder', 'add', '--kind', 'research', '--project', 'topic', '--outcome', 'Research the topic', '--accept', 'Find primary evidence', '--source', 'test').out.trim();
+  qst(e, 'ingest', 'decision', '--approve', id, '--text', 'approved', '--source', 'test');
+  const evidence = [{ criterion: 'Find primary evidence', citation: 'https://example.test/source', excerpt: 'Direct source states the finding.' }];
+  script(e, {
+    implement: [{ json: { status: 'done', summary: 'Found primary source', evidence } }],
+    review: [{ json: { verdict: 'approve', summary: 'Evidence supports the criterion', findings: [], assessments: [{ criterion: 'Find primary evidence', evidence: 'https://example.test/source', result: 'met' }] } }],
+    executive: [EXEC_EMPTY],
+  });
+  assert.equal(qst(e, 'sweep').code, 0);
+  const m = wo(e, id);
+  assert.equal(m.kind, 'research');
+  assert.equal(m.status, 'complete');
+  assert.equal(m.repo, undefined);
+  assert.equal(m.worktree, undefined);
+  assert.deepEqual(m.validations, []);
+  assert.match(calls(e, 'implement')[0].prompt, /read-only/);
+  assert.match(calls(e, 'review')[0].prompt, /citation/);
+  assert.equal(calls(e, 'implement')[0].cwd, `${e.desk}/work/${id}/scratch`);
+});
+
 test('failed checks never produce ready-for-integration; one correction, then failed, no review', () => {
   const e = setup();
   const id = approvedWorkOrder(e);
@@ -103,6 +128,18 @@ test('malformed agent result does not mark work complete', () => {
   assert.equal(m.status, 'blocked');
   assert.match(m.outcome_summary, /rejected/);
   assert.equal(m.attempts[0].result_ok, false);
+  assert.equal(calls(e, 'review').length, 0);
+});
+
+test('parseable implementer result with nonzero exit is rejected', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [{ json: { status: 'done', summary: 'looks done' }, exit: 7 }], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const m = wo(e, id);
+  assert.equal(m.status, 'blocked');
+  assert.equal(m.attempts[0].result_ok, false);
+  assert.match(m.outcome_summary, /agent exited 7/);
   assert.equal(calls(e, 'review').length, 0);
 });
 
