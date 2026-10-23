@@ -35,6 +35,53 @@ test('work order slugs are shown and accepted anywhere a work order id is used',
   assert.equal(qst(e, 'reconcile', slug, '--retry').code, 1, 'slug lookup still enforces the command state');
 });
 
+test('integrate rejects a work order outside ready-for-integration before touching git', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  const before = spawnSync('git', ['-C', e.repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  const r = qst(e, 'workorder', 'integrate', id);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, new RegExp(`${id} is proposed`));
+  assert.equal(spawnSync('git', ['-C', e.repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(), before);
+});
+
+test('integrate rebases onto advanced main and merges the work order', () => {
+  const e = setup();
+  spawnSync('git', ['-C', e.repo, 'branch', '-m', 'master']);
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const m = wo(e, id);
+  fs.writeFileSync(`${e.repo}/master-change.txt`, 'main advanced\n');
+  spawnSync('git', ['-C', e.repo, 'add', 'master-change.txt']);
+  spawnSync('git', ['-C', e.repo, 'commit', '-qm', 'advance main']);
+  const advancedMain = spawnSync('git', ['-C', e.repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+
+  const r = qst(e, 'workorder', 'integrate', id);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(fs.readFileSync(`${e.repo}/mul.js`, 'utf8'), IMPL_DONE.write['mul.js']);
+  assert.equal(fs.readFileSync(`${e.repo}/master-change.txt`, 'utf8'), 'main advanced\n');
+  assert.equal(spawnSync('git', ['-C', m.worktree, 'merge-base', '--is-ancestor', advancedMain, 'HEAD']).status, 0,
+    'rebased worktree should contain the advanced main commit');
+  assert.equal(wo(e, id).status, 'integrated');
+  assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /outcome: integrated/);
+  assert.equal(wo(e, id).base, advancedMain);
+});
+
+test('integrate merges without rebasing when the checked-out project branch has not advanced', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const m = wo(e, id);
+  const base = m.base;
+  const r = qst(e, 'workorder', 'integrate', id);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(spawnSync('git', ['-C', m.worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(), m.commit);
+  assert.equal(wo(e, id).base, base);
+  assert.equal(wo(e, id).status, 'integrated');
+});
+
 test('failed checks never produce ready-for-integration; one correction, then failed, no review', () => {
   const e = setup();
   const id = approvedWorkOrder(e);

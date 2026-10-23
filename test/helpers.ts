@@ -24,7 +24,7 @@ export function setup(policy: object = PERMISSIVE): Env {
   fs.mkdirSync(repo);
   fs.writeFileSync(path.join(repo, 'add.js'), 'module.exports = (a, b) => a + b;\n');
   fs.writeFileSync(path.join(repo, 'test.js'), "const assert = require('assert');\nassert.strictEqual(require('./add.js')(2, 3), 5);\nif (require('fs').existsSync('./mul.js')) assert.strictEqual(require('./mul.js')(2, 3), 6);\nconsole.log('ok');\n");
-  for (const args of [['init', '-q'], ['config', 'user.email', 't@example.com'], ['config', 'user.name', 'Test'], ['add', '-A'], ['commit', '-qm', 'init']]) {
+  for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.email', 't@example.com'], ['config', 'user.name', 'Test'], ['add', '-A'], ['commit', '-qm', 'init']]) {
     spawnSync('git', args, { cwd: repo });
   }
   const env = {
