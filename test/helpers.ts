@@ -9,6 +9,11 @@ export const QST = path.join(ROOT, 'bin', 'qst');
 
 export type Env = { root: string; desk: string; repo: string; env: NodeJS.ProcessEnv };
 
+const testRoots = new Set<string>();
+process.once('exit', () => {
+  for (const root of testRoots) fs.rmSync(root, { recursive: true, force: true });
+});
+
 export const PERMISSIVE = {
   autonomous_enabled: true, max_launches_per_sweep: 10, sweep_max_minutes: 5, on_window_start: 'finish',
   providers: {
@@ -19,6 +24,7 @@ export const PERMISSIVE = {
 
 export function setup(policy: object = PERMISSIVE): Env {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qst-test-'));
+  testRoots.add(root);
   const desk = path.join(root, 'desk');
   const repo = path.join(root, 'repo');
   fs.mkdirSync(repo);
