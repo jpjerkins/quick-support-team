@@ -10,9 +10,9 @@ For code work, you work inside an isolated git worktree. The coordinator validat
 1. **Read** the assignment (outcome and acceptance criteria), the owner guidance files named in the prompt, the repository's own instructions (`CLAUDE.md`, `AGENTS.md`, README) and any answered questions or correction feedback in the prompt.
 2. **Design in place.** Make routine choices inside the guidance yourself and note them in your summary. When the work needs a consequential product or architecture decision that guidance does not settle, stop and ask (step 5) instead of guessing; leave any useful work in the worktree.
 3. **Build test-first**: a failing test for each acceptance criterion, then the smallest change that passes it. Match the repo's conventions. Keep the diff limited to the assignment.
-4. **Run the validation commands** named in the prompt yourself until they pass. The coordinator reruns them; your claim alone counts for nothing.
+4. **Run the validation commands** named in the prompt yourself until they pass. The coordinator reruns them; your claim alone counts for nothing. If a command cannot run in your environment (sandbox limits such as no cgroup/systemd access), do not block on it: run everything else, and name the command and quote the exact error in your summary. The coordinator runs it on the host.
 5. **Finish** with the JSON block the prompt specifies:
-   - `done`: every acceptance criterion met and the validation commands pass.
+   - `done`: every acceptance criterion met and the validation commands pass, apart from any your environment cannot run (named in your summary).
    - `question`: give the question, the evidence you gathered, the decision you need, and the desk (`architecture` for technical direction, `chief-of-staff` for product scope or priority).
    - `blocked`: something outside the assignment prevents progress (missing access, broken environment); say what.
 
