@@ -131,7 +131,7 @@ function hold(wo: Rec, status: string, summary: string, next: string): Step {
 function correctOrEnd(wo: Rec, feedback: string, endStatus: string): Step {
   const failedRole = feedback.startsWith('review findings:') ? 'review' : 'implement';
   const failedAttempt = wo.meta.attempts.findLast((a: any) => a.role === failedRole);
-  if (failedAttempt) failedAttempt.correction_feedback = feedback;
+  if (failedAttempt) failedAttempt.correction_feedback_given = feedback;
   if (wo.meta.corrections_used < wo.meta.max_corrections) {
     Object.assign(wo.meta, { corrections_used: wo.meta.corrections_used + 1, feedback, status: 'correcting' });
     saveRec(wo);
@@ -311,9 +311,12 @@ function answeredQuestions(wo: Rec): string {
 
 const fence = (o: object) => '```json\n' + JSON.stringify(o) + '\n```';
 
+const latestRetryNote = (wo: Rec) => [...(wo.meta.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+const lastLines = (file: string) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trimEnd().split('\n').slice(-20).join('\n') : '';
+
 function implementPrompt(wo: Rec, attempt: Record<string, any>): string {
   const answered = answeredQuestions(wo);
-  const retryNote = [...(wo.meta.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const retryNote = latestRetryNote(wo);
   const hasHistory = wo.meta.attempts.some((a: any) => a.id !== attempt.id);
   return [
     `You are the implementer for work order ${wo.meta.id}. Read and follow ${skillPath('construction-implement')}.`,
@@ -335,7 +338,7 @@ function implementPrompt(wo: Rec, attempt: Record<string, any>): string {
 function reviewPrompt(wo: Rec, attempt: Record<string, any>): string {
   const v = wo.meta.validations.at(-1);
   const impl = wo.meta.attempts.findLast((a: any) => a.role === 'implement' && a.summary);
-  const retryNote = [...(wo.meta.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const retryNote = latestRetryNote(wo);
   const hasHistory = wo.meta.attempts.some((a: any) => a.id !== attempt.id);
   return [
     `You are the reviewer for work order ${wo.meta.id}; you are a separate session from the implementer. Read and follow ${skillPath('construction-review')}.`,
@@ -355,14 +358,28 @@ function reviewPrompt(wo: Rec, attempt: Record<string, any>): string {
 
 function writeAttemptHistory(wo: Rec): void {
   const m = wo.meta;
-  const latestNote = [...(m.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const latestNote = latestRetryNote(wo);
   const lines = [`# Earlier attempts for ${m.id}`, '', ...(latestNote ? [`## Latest owner instructions`, '', latestNote, ''] : [])];
   for (const [i, a] of m.attempts.entries()) {
-    lines.push(`## ${i + 1}. ${a.role} ${a.id}`, '', `- Provider/model: ${a.provider}/${a.model}`, `- Started/ended: ${a.started ?? '-'} / ${a.ended ?? '-'}`, `- Result: ${a.result_status ?? a.status}${a.summary ? ` — ${a.summary}` : ''}`, `- timed_out/exit: ${a.timed_out ?? '-'} / ${a.exit ?? '-'}`, `- Output: ${path.join(a.out_dir, fs.existsSync(path.join(a.out_dir, 'last-message.txt')) ? 'last-message.txt' : 'stdout')}`, `- Correction feedback: ${a.correction_feedback ?? 'none'}`);
+    const output = path.join(a.out_dir, fs.existsSync(path.join(a.out_dir, 'last-message.txt')) ? 'last-message.txt' : 'stdout');
+    lines.push(`## ${i + 1}. ${a.role} ${a.id}`, '', `- Provider/model: ${a.provider}/${a.model}`, `- Started/ended: ${a.started ?? '-'} / ${a.ended ?? '-'}`, `- Result: ${a.result_status ?? a.status}${a.summary ? ` — ${a.summary}` : ''}`, `- timed_out/exit: ${a.timed_out ?? '-'} / ${a.exit ?? '-'}`, `- Output: ${output}`, `- Correction feedback received: ${a.correction_feedback ?? 'none'}`, `- Correction feedback given: ${a.correction_feedback_given ?? 'none'}`);
+    if (a.result_ok === false || a.result_status === 'blocked') lines.push(`- Attempt output (last 20 lines; full file ${output}):`, '', '```text', lastLines(output) || '(empty)', '```');
     const validations = (m.validations ?? []).filter((v: any) => v.attempt === a.id);
-    for (const v of validations) lines.push(`- Validation ${v.id}: ${v.passed ? 'passed' : 'failed'} — ${v.results.map((r: any) => `${r.cmd} (exit ${r.exit}; log ${r.log})`).join('; ')}`);
+    for (const v of validations) {
+      lines.push(`- Validation ${v.id}: ${v.passed ? 'passed' : 'failed'} — ${v.results.map((r: any) => `${r.cmd} (exit ${r.exit}; log ${r.log})`).join('; ')}`);
+      for (const r of v.results.filter((x: any) => x.exit !== 0)) lines.push(`  - Exact error output (last 20 lines; full log ${r.log}):`, '', '  ```text', lastLines(r.log) || '(empty)', '  ```');
+    }
     const reviews = (m.reviews ?? []).filter((r: any) => r.attempt === a.id);
     for (const r of reviews) lines.push(`- Review findings: ${r.findings.map((f: any) => `[${f.severity}] ${f.text}`).join('; ') || 'none'}`);
+    lines.push('');
+  }
+  const unattributed = (m.validations ?? []).filter((v: any) => !v.attempt || !m.attempts.some((a: any) => a.id === v.attempt));
+  if (unattributed.length) {
+    lines.push('## Unattributed validations', '');
+    for (const v of unattributed) {
+      lines.push(`- Validation ${v.id}: ${v.passed ? 'passed' : 'failed'} — ${v.results.map((r: any) => `${r.cmd} (exit ${r.exit}; log ${r.log})`).join('; ')}`);
+      for (const r of v.results.filter((x: any) => x.exit !== 0)) lines.push(`  - Exact error output (last 20 lines; full log ${r.log}):`, '', '  ```text', lastLines(r.log) || '(empty)', '  ```');
+    }
     lines.push('');
   }
   for (const r of m.reconciled ?? []) lines.push(`## Reconcile ${r.action} (${r.at})`, '', `- From: ${r.from}`, `- Reason: ${r.reason ?? 'none'}`, `- Owner instructions: ${r.note ?? 'none'}`, '');

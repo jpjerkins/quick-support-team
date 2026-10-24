@@ -206,8 +206,28 @@ test('failed checks never produce ready-for-integration; one correction, then fa
   assert.equal(calls(e, 'implement').length, 2, 'original attempt plus exactly one correction');
   assert.match(calls(e, 'implement')[1].prompt, /correction attempt/);
   assert.match(calls(e, 'implement')[1].prompt, /attempt-history\.md/);
-  assert.match(fs.readFileSync(`${e.desk}/work/${id}/attempt-history.md`, 'utf8'), /Validation V1: failed/);
+  const history = fs.readFileSync(`${e.desk}/work/${id}/attempt-history.md`, 'utf8');
+  assert.match(history, /Validation V1: failed/);
+  assert.match(history, /Exact error output \(last 20 lines; full log .*V1\/1\.log\):[\s\S]*actual: 5[\s\S]*expected: 6/);
+  assert.match(history, /Correction feedback given: validation failed/);
+  assert.match(history, /Correction feedback received: none/);
+  assert.match(wo(e, id).attempts[1].correction_feedback, /validation failed/);
   assert.equal(calls(e, 'review').length, 0);
+});
+
+test('attempt history includes validations without an attempt attribution', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  const file = `${e.desk}/work/${id}/workorder.md`;
+  const raw = fs.readFileSync(file, 'utf8');
+  const end = raw.indexOf('\n---\n', 4);
+  const meta = JSON.parse(raw.slice(4, end));
+  meta.validations.push({ id: 'V0', at: '2026-01-01T00:00:00.000Z', results: [{ cmd: 'old check', exit: 1, log: '/old/V0.log' }], passed: false });
+  fs.writeFileSync(file, `---\n${JSON.stringify(meta, null, 2)}\n---\n${raw.slice(end + 5)}`);
+  script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  const history = fs.readFileSync(`${e.desk}/work/${id}/attempt-history.md`, 'utf8');
+  assert.match(history, /## Unattributed validations[\s\S]*V0[\s\S]*old check \(exit 1; log \/old\/V0\.log\)/);
 });
 
 test('blocked attempt history and owner retry note reach the next implementer', () => {
