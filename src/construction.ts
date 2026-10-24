@@ -71,9 +71,12 @@ async function launch(wo: Rec, role: string, skill: string, prompt: (attempt: Re
   }
   delete wo.meta.capacity_hold;
   const id = newId('A');
+  const earlier = wo.meta.attempts.length > 0;
+  if (earlier) writeAttemptHistory(wo);
   const attempt: Record<string, any> = {
     id, role, status: 'dispatched', started: iso(), provider: r.provider, model: r.model, harness: r.harness,
     out_dir: p('work', wo.meta.id, 'attempts', id), snapshots: snapshots(skill),
+    ...(wo.meta.status === 'correcting' ? { correction_feedback: wo.meta.feedback } : {}),
   };
   fs.mkdirSync(attempt.out_dir, { recursive: true });
   if (role === 'review' && kindOf(wo) === 'code') {
@@ -104,6 +107,9 @@ function take(a: any): { result: any; errors: string[] } {
   if (a.timed_out) errors.push('agent timed out');
   if (a.exit != null && a.exit !== 0) errors.push(`agent exited ${a.exit}`);
   a.processed = iso();
+  a.result_status = result?.status ?? result?.verdict ?? null;
+  a.summary = result?.summary ?? a.summary ?? null;
+  if (result?.findings) a.findings = result.findings;
   a.result_ok = errors.length === 0;
   return { result, errors };
 }
@@ -123,6 +129,9 @@ function hold(wo: Rec, status: string, summary: string, next: string): Step {
 }
 
 function correctOrEnd(wo: Rec, feedback: string, endStatus: string): Step {
+  const failedRole = feedback.startsWith('review findings:') ? 'review' : 'implement';
+  const failedAttempt = wo.meta.attempts.findLast((a: any) => a.role === failedRole);
+  if (failedAttempt) failedAttempt.correction_feedback = feedback;
   if (wo.meta.corrections_used < wo.meta.max_corrections) {
     Object.assign(wo.meta, { corrections_used: wo.meta.corrections_used + 1, feedback, status: 'correcting' });
     saveRec(wo);
@@ -163,7 +172,7 @@ function prepare(wo: Rec): Step {
 
 async function implement(wo: Rec, ctx: Ctx): Promise<Step> {
   const research = kindOf(wo) === 'research';
-  const a = await attemptFor(wo, 'implement', 'construction-implement', () => implementPrompt(wo), research ? 'read' : 'write', ctx);
+  const a = await attemptFor(wo, 'implement', 'construction-implement', (attempt) => implementPrompt(wo, attempt), research ? 'read' : 'write', ctx);
   if (!a) return 'wait';
   const { result, errors: base } = take(a);
   const errors = resultErrors(wo, 'implement', result, base);
@@ -202,6 +211,7 @@ function validate(wo: Rec): Step {
   const failed = results.filter((r: any) => r.exit !== 0);
   const noChange = !dirty && !committed;
   wo.meta.validations.push({ id: vid, at: iso(), results, passed: !failed.length && !noChange, no_change: noChange });
+  wo.meta.validations.at(-1).attempt = wo.meta.attempts.findLast((a: any) => a.role === 'implement')?.id;
   if (failed.length || noChange) {
     const why = noChange ? 'no code change was produced' : failed.map((r: any) => `\`${r.cmd}\` exited ${r.exit} (log ${r.log})`).join('; ');
     return correctOrEnd(wo, `validation failed: ${why}`, 'failed');
@@ -301,8 +311,10 @@ function answeredQuestions(wo: Rec): string {
 
 const fence = (o: object) => '```json\n' + JSON.stringify(o) + '\n```';
 
-function implementPrompt(wo: Rec): string {
+function implementPrompt(wo: Rec, attempt: Record<string, any>): string {
   const answered = answeredQuestions(wo);
+  const retryNote = [...(wo.meta.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const hasHistory = wo.meta.attempts.some((a: any) => a.id !== attempt.id);
   return [
     `You are the implementer for work order ${wo.meta.id}. Read and follow ${skillPath('construction-implement')}.`,
     `Assignment (outcome and acceptance criteria): ${woFile(wo.meta.id)}`,
@@ -310,6 +322,8 @@ function implementPrompt(wo: Rec): string {
       ? `Your working directory is the scratch directory ${wo.meta.scratch}. This is research work: read-only, with no side effects. Do not create, edit, or delete files, run commands that change state, or contact anyone. Cite a source for every acceptance criterion.`
       : `Your working directory is the isolated worktree ${wo.meta.worktree} (branch ${wo.meta.branch}). Do not commit, push, or merge; the coordinator commits after validation.`,
     `Owner-approved guidance: ${guidanceFiles().join(', ')}`,
+    hasHistory && `Earlier attempt history: ${p('work', wo.meta.id, 'attempt-history.md')}. Read it before proceeding.`,
+    retryNote && `LATEST OWNER RETRY INSTRUCTIONS: ${retryNote}`,
     kindOf(wo) === 'code' && `The coordinator will run: ${wo.meta.validate.join(' ; ')}`,
     kindOf(wo) === 'research' && `End with evidence: [{criterion, citation, finding}] for every acceptance criterion.`,
     answered && `Answered questions:\n${answered}`,
@@ -321,9 +335,13 @@ function implementPrompt(wo: Rec): string {
 function reviewPrompt(wo: Rec, attempt: Record<string, any>): string {
   const v = wo.meta.validations.at(-1);
   const impl = wo.meta.attempts.findLast((a: any) => a.role === 'implement' && a.summary);
+  const retryNote = [...(wo.meta.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const hasHistory = wo.meta.attempts.some((a: any) => a.id !== attempt.id);
   return [
     `You are the reviewer for work order ${wo.meta.id}; you are a separate session from the implementer. Read and follow ${skillPath('construction-review')}.`,
     `Assignment: ${woFile(wo.meta.id)}`,
+    hasHistory && `Earlier attempt history: ${p('work', wo.meta.id, 'attempt-history.md')}. Read it before reviewing.`,
+    retryNote && `LATEST OWNER RETRY INSTRUCTIONS: ${retryNote}`,
     kindOf(wo) === 'research'
       ? `Review the research result against every acceptance criterion. Check each cited source and judge whether it supports the finding. Return assessments: [{criterion, evidence, result: met|unmet}] using source citations.`
       : `Review the change in ${path.join(attempt.out_dir, 'change.diff')}`,
@@ -333,6 +351,22 @@ function reviewPrompt(wo: Rec, attempt: Record<string, any>): string {
     `Owner-approved guidance: ${guidanceFiles().join(', ')}`,
     `End your reply with ${fence(kindOf(wo) === 'research' ? { verdict: 'approve|changes', summary: '...', assessments: [{ criterion: '...', evidence: 'source citation', result: 'met|unmet' }], findings: [{ severity: 'blocking|minor', text: '...' }] } : { verdict: 'approve|changes', summary: '...', findings: [{ severity: 'blocking|minor', text: '...' }] })}`,
   ].join('\n\n');
+}
+
+function writeAttemptHistory(wo: Rec): void {
+  const m = wo.meta;
+  const latestNote = [...(m.reconciled ?? [])].reverse().find((r: any) => r.note)?.note;
+  const lines = [`# Earlier attempts for ${m.id}`, '', ...(latestNote ? [`## Latest owner instructions`, '', latestNote, ''] : [])];
+  for (const [i, a] of m.attempts.entries()) {
+    lines.push(`## ${i + 1}. ${a.role} ${a.id}`, '', `- Provider/model: ${a.provider}/${a.model}`, `- Started/ended: ${a.started ?? '-'} / ${a.ended ?? '-'}`, `- Result: ${a.result_status ?? a.status}${a.summary ? ` — ${a.summary}` : ''}`, `- timed_out/exit: ${a.timed_out ?? '-'} / ${a.exit ?? '-'}`, `- Output: ${path.join(a.out_dir, fs.existsSync(path.join(a.out_dir, 'last-message.txt')) ? 'last-message.txt' : 'stdout')}`, `- Correction feedback: ${a.correction_feedback ?? 'none'}`);
+    const validations = (m.validations ?? []).filter((v: any) => v.attempt === a.id);
+    for (const v of validations) lines.push(`- Validation ${v.id}: ${v.passed ? 'passed' : 'failed'} — ${v.results.map((r: any) => `${r.cmd} (exit ${r.exit}; log ${r.log})`).join('; ')}`);
+    const reviews = (m.reviews ?? []).filter((r: any) => r.attempt === a.id);
+    for (const r of reviews) lines.push(`- Review findings: ${r.findings.map((f: any) => `[${f.severity}] ${f.text}`).join('; ') || 'none'}`);
+    lines.push('');
+  }
+  for (const r of m.reconciled ?? []) lines.push(`## Reconcile ${r.action} (${r.at})`, '', `- From: ${r.from}`, `- Reason: ${r.reason ?? 'none'}`, `- Owner instructions: ${r.note ?? 'none'}`, '');
+  writeAtomic(p('work', m.id, 'attempt-history.md'), `${lines.join('\n')}\n`);
 }
 
 function architecturePrompt(wo: Rec, q: Rec): string {

@@ -105,6 +105,8 @@ Before any model is started, a free check exits if there is no actionable work, 
 - If its output contains a valid result, that result is adopted.
 - Otherwise the work order becomes `uncertain`. You inspect the output and worktree, then run `qst reconcile WO --retry` or `--fail "reason"`.
 - `--retry` on work that used up its correction grants exactly one more attempt.
+- Add `--note "TEXT"` to `qst reconcile WO --retry` to give the next implement or review attempt owner instructions. The note is recorded in the work order's reconciliation history and shown at the top of `work/WO/attempt-history.md`.
+- Before each later implement or review launch, qst writes `work/WO/attempt-history.md` with all earlier attempts, their outputs, validation and review results, correction feedback, and reconcile actions. The prompt points the agent to this file; first attempts have no history file or pointer.
 - An interrupted executive run is marked uncertain, and its proposals are not applied.
 
 ## Scheduling

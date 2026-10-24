@@ -25,7 +25,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst sweep [--dry-run] [--owner]            one bounded sweep (--owner: you are explicitly authorizing this run)
   qst status [WO-ID]                         digest, or one work order in detail
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
-  qst reconcile WO-ID --retry | --fail REASON
+  qst reconcile WO-ID --retry [--note TEXT] | --fail REASON
   qst capacity [observe --provider P --kind provider|estimate --source SRC [--used-pct N --resets-at T --observed-at T --note X]]
   qst open chief-of-staff|architecture       run an interactive desk session in this terminal
   qst help                                   show this command list
@@ -143,7 +143,7 @@ function reconcile(id: string): number {
     const wo = loadWO(id);
     if (!['uncertain', 'blocked'].includes(wo.meta.status)) throw new Error(`${id} is ${wo.meta.status}; only uncertain or blocked work is reconciled`);
     for (const a of wo.meta.attempts) if (a.status === 'uncertain') a.status = 'abandoned';
-    wo.meta.reconciled = [...(wo.meta.reconciled ?? []), { at: iso(), action: o.retry ? 'retry' : 'fail', from: wo.meta.status, reason: o.fail ?? null }];
+    wo.meta.reconciled = [...(wo.meta.reconciled ?? []), { at: iso(), action: o.retry ? 'retry' : 'fail', from: wo.meta.status, reason: o.fail ?? null, note: o.retry ? o.note ?? null : null }];
     if (o.fail) {
       Object.assign(wo.meta, { status: 'failed', outcome_summary: `failed by owner: ${o.fail}`, next_action: 'none', outcome_at: iso() });
     } else {

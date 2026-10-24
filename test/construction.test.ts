@@ -23,6 +23,7 @@ test('approved work order reaches ready-for-integration with real tests, a commi
   const expectedDiff = spawnSync('git', ['diff', `${m.base}..${m.commit}`], { cwd: m.worktree, encoding: 'utf8' }).stdout;
   assert.equal(fs.readFileSync(diffFile, 'utf8'), expectedDiff);
   assert.ok(calls(e, 'review')[0].prompt.includes(diffFile));
+  assert.doesNotMatch(calls(e, 'implement')[0].prompt, /attempt-history\.md/);
   assert.ok(m.attempts[0].snapshots['skills/construction-implement']);
   assert.match(fs.readFileSync(`${e.desk}/work/${id}/outcome.md`, 'utf8'), /ready-for-integration/);
 });
@@ -204,7 +205,26 @@ test('failed checks never produce ready-for-integration; one correction, then fa
   assert.equal(m.status, 'failed');
   assert.equal(calls(e, 'implement').length, 2, 'original attempt plus exactly one correction');
   assert.match(calls(e, 'implement')[1].prompt, /correction attempt/);
+  assert.match(calls(e, 'implement')[1].prompt, /attempt-history\.md/);
+  assert.match(fs.readFileSync(`${e.desk}/work/${id}/attempt-history.md`, 'utf8'), /Validation V1: failed/);
   assert.equal(calls(e, 'review').length, 0);
+});
+
+test('blocked attempt history and owner retry note reach the next implementer', () => {
+  const e = setup();
+  const id = approvedWorkOrder(e);
+  script(e, { implement: [{ json: { status: 'blocked', summary: 'needs owner direction' } }, IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
+  qst(e, 'sweep');
+  assert.equal(wo(e, id).status, 'blocked');
+  assert.equal(qst(e, 'reconcile', id, '--retry', '--note', 'Keep the public API unchanged.').code, 0);
+  qst(e, 'sweep');
+  const prompt = calls(e, 'implement')[1].prompt;
+  assert.match(prompt, /LATEST OWNER RETRY INSTRUCTIONS: Keep the public API unchanged\./);
+  const history = fs.readFileSync(`${e.desk}/work/${id}/attempt-history.md`, 'utf8');
+  assert.match(history, /needs owner direction/);
+  assert.match(history, /Keep the public API unchanged\./);
+  assert.match(history, /Output: .*stdout/);
+  assert.match(qst(e, 'help').out, /--note TEXT/);
 });
 
 test('malformed agent result does not mark work complete', () => {
