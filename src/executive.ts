@@ -54,7 +54,7 @@ function executivePrompt(reasons: string[]): string {
   const ds = listDecisions().filter((d) => d.meta.status === 'open').map((d) => `- ${d.meta.id} key=${d.meta.key}: ${d.body.split('\n')[0]}`);
   const shape = { answers: [{ question: 'Q-...', answer: '...', guidance_refs: ['...'] }, { question: 'Q-...', route_to: 'architecture' }],
     decisions: [{ key: 'stable-key', title: '...', why: '...', recommendation: '...', tradeoff: '...', blocks: ['WO-...'], deadline: null, priority: 1 }],
-    workorders: [{ project: 'slug', outcome: '...', acceptance: ['...'], validate: ['...'], why: '...', departures: [] }], notes: '...' };
+    workorders: [{ project: 'slug', outcome: '...', summary: 'short description (optional)', acceptance: ['...'], validate: ['...'], why: '...', departures: [] }], notes: '...' };
   return [
     `You are the Chief of Staff running one unattended executive sweep; the owner is not present. Read and follow the "Unattended sweep" section of ${skillPath('chief-of-staff')}.`,
     `Desk: ${deskDir()} (owner/, portfolio/, work/*/workorder.md and outcome.md, questions/, decisions/, departures/, signals/).`,

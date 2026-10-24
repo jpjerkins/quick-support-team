@@ -32,6 +32,6 @@ test('a Chief of Staff work-order proposal stays proposed and asks the owner for
   const id = fs.readdirSync(`${e.desk}/work`)[0];
   assert.equal(wo(e, id).status, 'proposed');
   assert.equal(calls(e, 'implement').length, 0);
-  assert.match(qst(e, 'digest').out, new RegExp(`Approve work order ${id}`));
+  assert.match(qst(e, 'digest').out, /Approve work order Add mul/);
   assert.match(fs.readFileSync(`${e.desk}/decisions/${files(e, 'decisions')[0]}`, 'utf8'), /node test\.js/);
 });

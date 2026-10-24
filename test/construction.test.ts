@@ -72,7 +72,7 @@ test('work order slugs are shown and accepted anywhere a work order id is used',
   const slug = wo(e, id).slug;
   assert.match(slug, /^[a-z]+-[a-z]+$/);
   assert.match(qst(e, 'status', slug).out, new RegExp(`slug: ${slug}`));
-  assert.match(qst(e, 'digest').out, new RegExp(`${id} \\(${slug}\\)`));
+  assert.match(qst(e, 'digest').out, new RegExp(`\\| ${slug} \\|`));
   qst(e, 'ingest', 'decision', '--approve', slug, '--text', 'approved', '--source', 'test');
   script(e, { implement: [IMPL_DONE], review: [REVIEW_OK], executive: [EXEC_EMPTY] });
   qst(e, 'sweep');

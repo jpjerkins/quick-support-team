@@ -21,7 +21,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst ingest decision --text T --source SRC [--approve WO-ID...] [--answers Q-ID] [--resolves D-ID]
   qst ingest observation|proposal --text T --source SRC --by WHO [--departure TITLE --project S]
   qst workorder integrate WO-ID                 merge ready work onto the project's main branch
-  qst workorder add --project S --outcome O --accept A... [--kind code|research] [--implementer claude|codex:MODEL] [--validate CMD...] [--departure DEP-ID...] --source SRC
+  qst workorder add --project S --outcome O --accept A... [--summary TEXT] [--kind code|research] [--implementer claude|codex:MODEL] [--validate CMD...] [--departure DEP-ID...] --source SRC
   qst sweep [--dry-run] [--owner]            one bounded sweep (--owner: you are explicitly authorizing this run)
   qst status [WO-ID]                         digest, or one work order in detail
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
@@ -35,7 +35,7 @@ const { values: o, positionals: pos } = parseArgs({
   allowPositionals: true,
   options: {
     text: { type: 'string' }, source: { type: 'string' }, by: { type: 'string' }, topic: { type: 'string' },
-    slug: { type: 'string' }, name: { type: 'string' }, state: { type: 'string' }, repo: { type: 'string' }, purpose: { type: 'string' },
+    slug: { type: 'string' }, name: { type: 'string' }, state: { type: 'string' }, repo: { type: 'string' }, purpose: { type: 'string' }, summary: { type: 'string' },
     validate: { type: 'string', multiple: true }, approve: { type: 'string', multiple: true }, answers: { type: 'string' }, resolves: { type: 'string' },
     departure: { type: 'string', multiple: true }, project: { type: 'string' }, outcome: { type: 'string' }, accept: { type: 'string', multiple: true },
     'dry-run': { type: 'boolean' }, owner: { type: 'boolean' }, ack: { type: 'boolean' }, retry: { type: 'boolean' }, fail: { type: 'string' },
@@ -69,7 +69,7 @@ async function main(): Promise<number> {
       if (sub !== 'add') throw new Error('usage: qst workorder add ... | qst workorder integrate WO-ID');
       if (!o.project || !o.outcome || !o.source) throw new Error('--project, --outcome and --source are required');
       const [provider, ...model] = o.implementer?.split(':') ?? [];
-      console.log(createWorkOrder({ kind: o.kind, project: o.project, outcome: o.outcome, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source, implementer: o.implementer ? { provider, model: model.join(':') } : undefined }));
+      console.log(createWorkOrder({ kind: o.kind, project: o.project, outcome: o.outcome, summary: o.summary, acceptance: o.accept ?? [], validate: o.validate, departures: o.departure, source: o.source, implementer: o.implementer ? { provider, model: model.join(':') } : undefined }));
       return 0;
     }
     case 'sweep':

@@ -81,6 +81,7 @@ export function checkExecutive(r: any): Errors {
   for (const d of r.decisions ?? []) e.push(...checkDecision(d));
   for (const w of r.workorders ?? []) {
     if (!isStr(w?.project) || !isStr(w?.outcome) || !strArr(w?.acceptance) || !w.acceptance.length) e.push('workorders[] need project, outcome, acceptance[]');
+    if (w?.summary != null && !isStr(w.summary)) e.push('workorders[].summary must be a non-empty string');
   }
   return e;
 }

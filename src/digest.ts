@@ -3,9 +3,9 @@ import { p, now, iso, readState, writeState, writeAtomic } from './desk.ts';
 import type { Rec } from './desk.ts';
 import { listWOs, listQuestions, listDecisions, decisionHash, questionText } from './records.ts';
 import { loadPolicy, launchesToday, latestObservation } from './capacity.ts';
-import { ACTIVE } from './construction.ts';
 
 const URGENT_HOURS = 48;
+const withoutIds = (text: string) => text.replace(/\b(?:WO|D|S)-[A-Za-z0-9-]+\b/g, '').replace(/\b(work order)\s*:\s*/i, '$1 ').replace(/\s+/g, ' ').trim();
 
 function openDecisions(): Rec[] {
   return listDecisions().filter((d) => d.meta.status === 'open')
@@ -14,27 +14,38 @@ function openDecisions(): Rec[] {
 
 export const isNew = (d: Rec, acked: Record<string, string>) => acked[d.meta.id] !== decisionHash(d);
 
+function description(w: Rec): string {
+  const text = w.meta.summary ?? w.meta.outcome.split(/(?<=[.!?])\s/)[0];
+  const clean = withoutIds(text);
+  return clean.length > 80 ? `${clean.slice(0, 77).trimEnd()}...` : clean;
+}
+
+function workOrderRows(wos: Rec[]): string[] {
+  const group = (status: string) => status === 'failed' ? 0 : ['blocked', 'uncertain'].includes(status) ? 1
+    : status === 'proposed' ? 3 : 2;
+  return [...wos].sort((a, b) => group(a.meta.status) - group(b.meta.status)
+    || a.meta.created.localeCompare(b.meta.created)).map((w) =>
+    `| ${w.meta.status} | ${withoutIds(w.meta.slug ?? '')} | ${withoutIds(w.meta.project)} | ${description(w)} |`);
+}
+
+function decisionRows(ds: Rec[], wos: Rec[]): string[] {
+  return ds.map((d) => {
+    const blocked = wos.find((w) => ['blocked', 'uncertain'].includes(w.meta.status) && d.meta.blocks?.includes(w.meta.id));
+    const needed = withoutIds(d.body.split('\n')[0].replace(/^# /, ''));
+    return `| P${d.meta.priority} | ${withoutIds(blocked?.meta.slug ?? '')} | ${needed} |`;
+  });
+}
+
 export function renderDigest(): string {
   const acked = readState().acked ?? {};
   const ds = openDecisions();
   const wos = listWOs().filter((w) => w.meta.status !== 'integrated');
   const out: string[] = [`# Digest (${iso().slice(0, 16)}Z)`, ''];
 
-  out.push(`## Decisions for you: ${ds.length} open, ${ds.filter((d) => isNew(d, acked)).length} new`, '');
-  ds.forEach((d, i) => {
-    const title = d.body.split('\n')[0].replace(/^# /, '');
-    const rec = (d.body.match(/\*\*Recommendation:\*\* (.*)/) ?? [])[1] ?? '';
-    out.push(`${i + 1}. [P${d.meta.priority}]${isNew(d, acked) ? ' NEW' : ''} ${title} (${d.meta.id}; deadline ${d.meta.deadline ?? 'none'}; blocks ${d.meta.blocks.join(', ') || 'nothing'})`, `   Recommendation: ${rec}`);
-  });
+  out.push(`## Decisions for you: ${ds.length} open, ${ds.filter((d) => isNew(d, acked)).length} new`, '',
+    '| Priority | About | What\'s needed |', '|---|---|---|', ...decisionRows(ds, wos));
 
-  const done = wos.filter((w) => w.meta.outcome_at).sort((a, b) => b.meta.outcome_at.localeCompare(a.meta.outcome_at));
-  out.push('', '## Outcomes', '', ...(done.length ? done.slice(0, 10).map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''} **${w.meta.status}**: ${w.meta.outcome_summary}\n  Next: ${w.meta.next_action}`) : ['- none yet']));
-
-  const active = wos.filter((w) => ACTIVE.includes(w.meta.status) || w.meta.status === 'approved');
-  out.push('', '## Active work', '', ...(active.length ? active.map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''} ${w.meta.status}: ${w.meta.outcome}${w.meta.next_action ? ` (next: ${w.meta.next_action})` : ''}${w.meta.capacity_hold ? ` [${w.meta.capacity_hold}]` : ''}`) : ['- none']));
-
-  const proposed = wos.filter((w) => w.meta.status === 'proposed');
-  if (proposed.length) out.push('', '## Proposed (awaiting approval)', '', ...proposed.map((w) => `- ${w.meta.id}${w.meta.slug ? ` (${w.meta.slug})` : ''}: ${w.meta.outcome} (${w.meta.project})`));
+  out.push('', '## Work orders', '', '| Status | Slug | Project | What it does |', '|---|---|---|---|', ...workOrderRows(wos));
 
   const qs = listQuestions().filter((q) => q.meta.status !== 'answered');
   if (qs.length) out.push('', '## Questions in flight', '', ...qs.map((q) => `- ${q.meta.id} (${q.meta.wo}) ${q.meta.status} at ${q.meta.desk}: ${questionText(q).slice(0, 160)}`));
