@@ -27,7 +27,7 @@ const HELP = `qst - quick support team launcher (desk: ${deskDir()})
   qst digest [--ack]                         decisions first; --ack marks current decisions as seen
   qst reconcile WO-ID --retry [--note TEXT] | --fail REASON
   qst capacity [observe --provider P --kind provider|estimate --source SRC [--used-pct N --resets-at T --observed-at T --note X]]
-  qst open chief-of-staff|architecture       run an interactive desk session in this terminal
+  qst open chief-of-staff|architecture [--codex] run an interactive desk session in this terminal
   qst help                                   show this command list
 `;
 
@@ -41,7 +41,7 @@ const { values: o, positionals: pos } = parseArgs({
     'dry-run': { type: 'boolean' }, owner: { type: 'boolean' }, ack: { type: 'boolean' }, retry: { type: 'boolean' }, fail: { type: 'string' },
     provider: { type: 'string' }, kind: { type: 'string' }, 'used-pct': { type: 'string' }, 'resets-at': { type: 'string' },
     implementer: { type: 'string' },
-    'observed-at': { type: 'string' }, note: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+    'observed-at': { type: 'string' }, note: { type: 'string' }, codex: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
   },
 });
 
@@ -180,9 +180,10 @@ function openDesk(desk?: string): number {
   const roles: Record<string, [string, string]> = { 'chief-of-staff': ['executive', 'chief-of-staff'], architecture: ['architecture', 'architecture-desk'] };
   if (!desk || !roles[desk]) throw new Error('usage: qst open chief-of-staff|architecture');
   const [role, skill] = roles[desk];
-  const r = route(role);
+  const r = o.codex && desk === 'chief-of-staff' ? { provider: 'codex', model: 'gpt-6.1-sol', harness: 'codex' } : route(role);
   const prompt = `Read and follow ${skillPath(skill)} (interactive session with Phil). Desk: ${deskDir()}. Start by reading ${p('digest.md')}.`;
   const { cmd, args } = interactiveCommand(r, prompt);
+  if (o.codex && desk === 'chief-of-staff') args.push('-c', 'model_reasoning_effort="high"');
   const result = spawnSync(cmd, args, { cwd: deskDir(), stdio: 'inherit' });
   if (result.error) throw result.error;
   return result.status ?? 1;
